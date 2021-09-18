@@ -7,7 +7,7 @@ This repository supports Intel Vision Sensing Controller(IVSC) on Intel Alder La
 building with kernel source tree is available.
 
 ### build with kernel source tree
-* Tested with kernel 5.12-rc4
+* Tested with kernel 5.12-rc4 and 5.13-rc5
 * Check out kernel
 * Copy repo content to kernel source
 * Modify related Kconfig and Makefile
