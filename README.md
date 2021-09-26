@@ -121,3 +121,21 @@ CONFIG_INTEL_VSC_ACE=m
 CONFIG_INTEL_VSC_PSE=m
 CONFIG_INTEL_VSC_ACE_DEBUG=m
 ```
+
+
+## Deployment:
+ivsc firmware bins should be copied to /lib/firmware/vsc.
+
+And on debugging platform the binaries will be put as below:
+```
+/lib/firmware/vsc/soc_a1/ivsc_fw_a1.bin
+/lib/firmware/vsc/soc_a1/ivsc_pkg_ovti01as_0_a1.bin
+/lib/firmware/vsc/soc_a1/ivsc_skucfg_ovti01as_0_1_a1.bin
+```
+
+And on production platform the binaries will be put as below:
+```
+/lib/firmware/vsc/soc_a1_prod/ivsc_fw_a1_prod.bin
+/lib/firmware/vsc/soc_a1_prod/ivsc_pkg_ovti01as_0_a1_prod.bin
+/lib/firmware/vsc/soc_a1_prod/ivsc_skucfg_ovti01as_0_1_a1_prod.bin
+```
