@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
 #include <linux/spi/spi.h>
+#include <linux/version.h>
 
 #include "client.h"
 #include "hw-vsc.h"
@@ -224,7 +225,11 @@ static int __maybe_unused mei_vsc_resume(struct device *device)
 	return 0;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 18, 0)
 static int mei_vsc_remove(struct spi_device *spi)
+#else
+static void mei_vsc_remove(struct spi_device *spi)
+#endif
 {
 	struct mei_device *dev = spi_get_drvdata(spi);
 	struct mei_vsc_hw *hw = to_vsc_hw(dev);
@@ -238,7 +243,9 @@ static int mei_vsc_remove(struct spi_device *spi)
 	free_irq(hw->wakeuphostint, dev);
 	mei_deregister(dev);
 	mutex_destroy(&hw->mutex);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 18, 0)
 	return 0;
+#endif
 }
 
 /**
