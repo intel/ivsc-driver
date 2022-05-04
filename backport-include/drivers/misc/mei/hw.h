@@ -8,6 +8,7 @@
 #define _MEI_HW_TYPES_H_
 
 #include <linux/uuid.h>
+#include <linux/version.h>
 
 /*
  * Timeouts in Seconds
@@ -235,9 +236,17 @@ enum mei_ext_hdr_type {
 struct mei_ext_hdr {
 	u8 type;
 	u8 length;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
 	u8 ext_payload[2];
 	u8 hdr[];
-};
+#else
+	u8 data[];
+#endif
+}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
+__packed
+#endif
+;
 
 /**
  * struct mei_ext_meta_hdr - extend header meta data
@@ -250,8 +259,31 @@ struct mei_ext_meta_hdr {
 	u8 count;
 	u8 size;
 	u8 reserved[2];
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
 	struct mei_ext_hdr hdrs[];
-};
+#else
+	u8 hdrs[];
+#endif
+}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
+__packed
+#endif
+;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
+/**
+ * struct mei_ext_hdr_vtag - extend header for vtag
+ *
+ * @hdr: standard extend header
+ * @vtag: virtual tag
+ * @reserved: reserved
+ */
+struct mei_ext_hdr_vtag {
+	struct mei_ext_hdr hdr;
+	u8 vtag;
+	u8 reserved;
+} __packed;
+#endif
 
 /*
  * Extended header iterator functions
@@ -266,7 +298,7 @@ struct mei_ext_meta_hdr {
  */
 static inline struct mei_ext_hdr *mei_ext_begin(struct mei_ext_meta_hdr *meta)
 {
-	return meta->hdrs;
+	return (struct mei_ext_hdr *)meta->hdrs;
 }
 
 /**
@@ -284,7 +316,7 @@ static inline bool mei_ext_last(struct mei_ext_meta_hdr *meta,
 }
 
 /**
- *mei_ext_next - following extended header on the TLV list
+ * mei_ext_next - following extended header on the TLV list
  *
  * @ext: current extend header
  *
@@ -295,7 +327,11 @@ static inline bool mei_ext_last(struct mei_ext_meta_hdr *meta,
  */
 static inline struct mei_ext_hdr *mei_ext_next(struct mei_ext_hdr *ext)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
 	return (struct mei_ext_hdr *)(ext->hdr + (ext->length * 4));
+#else
+	return (struct mei_ext_hdr *)((u8 *)ext + (ext->length * 4));
+#endif
 }
 
 /**
