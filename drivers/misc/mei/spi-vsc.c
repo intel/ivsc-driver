@@ -14,9 +14,7 @@
 #include <linux/spi/spi.h>
 #include <linux/version.h>
 
-#include "client.h"
 #include "hw-vsc.h"
-#include "mei_dev.h"
 
 #define CVFD_ACPI_ID_TGL "INTC1059"
 #define CVFD_ACPI_ID_ADL "INTC1095"
