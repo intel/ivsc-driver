@@ -122,6 +122,21 @@ CONFIG_INTEL_VSC_PSE=m
 CONFIG_INTEL_VSC_ACE_DEBUG=m
 ```
 
+### build out of kernel source tree
+* Requires 5.13 or later kernel header installed on compiling machine
+
+* To compile:
+```
+$cd ivsc-driver
+$make -j`nproc`
+```
+
+* To install and use modules
+```
+$sudo make modules_install
+$sudo depmod -a
+```
+
 
 ## Deployment:
 ivsc firmware bins should be copied to /lib/firmware/vsc.
