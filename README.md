@@ -4,7 +4,10 @@ This repository supports Intel Vision Sensing Controller(IVSC) on Intel Alder La
 
 
 ## Build instructions:
-building with kernel source tree is available.
+Three ways are available:
+  1. build with kernel source tree
+  2. build out of kernel source tree
+  3. build with dkms
 
 ### build with kernel source tree
 * Tested with kernel 5.12-rc4 and 5.13-rc5
@@ -136,6 +139,10 @@ $make -j`nproc`
 $sudo make modules_install
 $sudo depmod -a
 ```
+
+### Build with dkms
+a dkms.conf file is also provided as an example for building with dkms which can be
+used by ```dkms``` ```add```, ```build``` and ```install```.
 
 
 ## Deployment:
