@@ -430,7 +430,9 @@ static int ljca_gpio_probe(struct platform_device *pdev)
 
 	ljca_gpio->gc.base = -1;
 	ljca_gpio->gc.ngpio = ljca_gpio->ctr_info->num;
-	ljca_gpio->gc.label = "ljca-gpio";
+	ljca_gpio->gc.label = ACPI_COMPANION(&pdev->dev) ?
+			      acpi_dev_name(ACPI_COMPANION(&pdev->dev)) :
+			      "ljca-gpio";
 	ljca_gpio->gc.owner = THIS_MODULE;
 
 	platform_set_drvdata(pdev, ljca_gpio);
