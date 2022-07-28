@@ -292,6 +292,7 @@ static void ljca_irq_unmask(struct irq_data *irqd)
 	int gpio_id = irqd_to_hwirq(irqd);
 
 	dev_dbg(ljca_gpio->gc.parent, "%s %d", __func__, gpio_id);
+	gpiochip_enable_irq(gc, gpio_id);
 	set_bit(gpio_id, ljca_gpio->unmasked_irqs);
 }
 
@@ -303,6 +304,7 @@ static void ljca_irq_mask(struct irq_data *irqd)
 
 	dev_dbg(ljca_gpio->gc.parent, "%s %d", __func__, gpio_id);
 	clear_bit(gpio_id, ljca_gpio->unmasked_irqs);
+	gpiochip_disable_irq(gc, gpio_id);
 }
 
 static int ljca_irq_set_type(struct irq_data *irqd, unsigned type)
@@ -398,6 +400,8 @@ static struct irq_chip ljca_gpio_irqchip = {
 	.irq_bus_sync_unlock = ljca_irq_bus_unlock,
 	.irq_startup = ljca_irq_startup,
 	.irq_shutdown = ljca_irq_shutdown,
+	.flags = IRQCHIP_IMMUTABLE,
+	GPIOCHIP_IRQ_RESOURCE_HELPERS,
 };
 
 static int ljca_gpio_probe(struct platform_device *pdev)
@@ -439,7 +443,7 @@ static int ljca_gpio_probe(struct platform_device *pdev)
 	ljca_register_event_cb(pdev, ljca_gpio_event_cb);
 
 	girq = &ljca_gpio->gc.irq;
-	girq->chip = &ljca_gpio_irqchip;
+	gpio_irq_chip_set_chip(girq, &ljca_gpio_irqchip);
 	girq->parent_handler = NULL;
 	girq->num_parents = 0;
 	girq->parents = NULL;
