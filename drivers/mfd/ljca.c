@@ -25,20 +25,23 @@ enum ljca_acpi_match_adr {
 };
 
 static char *gpio_hids[] = {
-	"INTC1074",
-	"INTC1096",
+	"INTC1074", /* TGL */
+	"INTC1096", /* ADL */
+	"INTC100B", /* RPL */
 };
 static struct mfd_cell_acpi_match ljca_acpi_match_gpio;
 
 static char *i2c_hids[] = {
-	"INTC1075",
-	"INTC1097",
+	"INTC1075", /* TGL */
+	"INTC1097", /* ADL */
+	"INTC100C", /* RPL */
 };
 static struct mfd_cell_acpi_match ljca_acpi_match_i2cs[2];
 
 static char *spi_hids[] = {
-	"INTC1091",
-	"INTC1098",
+	"INTC1091", /* TGL */
+	"INTC1098", /* ADL */
+	"INTC100D", /* RPL */
 };
 static struct mfd_cell_acpi_match ljca_acpi_match_spis[1];
 
