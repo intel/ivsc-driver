@@ -18,6 +18,7 @@
 
 #define CVFD_ACPI_ID_TGL "INTC1059"
 #define CVFD_ACPI_ID_ADL "INTC1095"
+#define CVFD_ACPI_ID_RPL "INTC100A"
 #define LINK_NUMBER (1)
 #define METHOD_NAME_SID "SID"
 
@@ -43,7 +44,8 @@ static struct acpi_device *find_cvfd_child_adev(struct acpi_device *parent)
 
 	list_for_each_entry (adev, &parent->children, node) {
 		if (!strcmp(CVFD_ACPI_ID_TGL, acpi_device_hid(adev)) ||
-		    !strcmp(CVFD_ACPI_ID_ADL, acpi_device_hid(adev)))
+		    !strcmp(CVFD_ACPI_ID_ADL, acpi_device_hid(adev)) ||
+		    !strcmp(CVFD_ACPI_ID_RPL, acpi_device_hid(adev)))
 			return adev;
 	}
 
@@ -276,6 +278,7 @@ static const struct dev_pm_ops mei_vsc_pm_ops = {
 static const struct acpi_device_id mei_vsc_acpi_ids[] = {
 	{ "INTC1058", 1 },
 	{ "INTC1094", 1 },
+	{ "INTC1009", 1 }, /* RPL */
 	{},
 };
 MODULE_DEVICE_TABLE(acpi, mei_vsc_acpi_ids);
