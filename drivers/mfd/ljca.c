@@ -16,6 +16,7 @@
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/usb.h>
+#include <linux/version.h>
 
 enum ljca_acpi_match_adr {
 	LJCA_ACPI_MATCH_GPIO,
@@ -225,24 +226,38 @@ static int try_match_acpi_hid(struct acpi_device *child,
 	return 0;
 }
 
+static int precheck_acpi_hid_entry(struct acpi_device *adev, void *not_used)
+{
+	try_match_acpi_hid(adev, &ljca_acpi_match_gpio, gpio_hids,
+			   ARRAY_SIZE(gpio_hids));
+	try_match_acpi_hid(adev, &ljca_acpi_match_i2cs[0], i2c_hids,
+			   ARRAY_SIZE(i2c_hids));
+	try_match_acpi_hid(adev, &ljca_acpi_match_i2cs[1], i2c_hids,
+			   ARRAY_SIZE(i2c_hids));
+	try_match_acpi_hid(adev, &ljca_acpi_match_spis[0], spi_hids,
+			   ARRAY_SIZE(spi_hids));
+
+	return 0;
+}
+
 static int precheck_acpi_hid(struct usb_interface *intf)
 {
-	struct acpi_device *parent, *child;
+	struct acpi_device *parent;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6,0,0))
+	struct acpi_device *child;
+#endif
 
 	parent = ACPI_COMPANION(&intf->dev);
 	if (!parent)
 		return -ENODEV;
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6,0,0))
 	list_for_each_entry (child, &parent->children, node) {
-		try_match_acpi_hid(child, &ljca_acpi_match_gpio, gpio_hids,
-				   ARRAY_SIZE(gpio_hids));
-		try_match_acpi_hid(child, &ljca_acpi_match_i2cs[0], i2c_hids,
-				   ARRAY_SIZE(i2c_hids));
-		try_match_acpi_hid(child, &ljca_acpi_match_i2cs[1], i2c_hids,
-				   ARRAY_SIZE(i2c_hids));
-		try_match_acpi_hid(child, &ljca_acpi_match_spis[0], spi_hids,
-				   ARRAY_SIZE(spi_hids));
+		precheck_acpi_hid_entry(child, NULL);
 	}
+#else
+	acpi_dev_for_each_child(parent, precheck_acpi_hid_entry, NULL);
+#endif /* >= 5.18 */
 
 	return 0;
 }

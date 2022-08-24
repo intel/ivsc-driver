@@ -10,6 +10,7 @@
 #include <linux/mfd/ljca.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/version.h>
 
 /* I2C commands */
 enum i2c_cmd {
@@ -322,42 +323,66 @@ static const struct i2c_algorithm ljca_i2c_algo = {
 	.functionality = ljca_i2c_func,
 };
 
+struct bind_acpi_data {
+	struct ljca_i2c_dev *ljca_i2c;
+	const char *hid1;
+	const char *uid1;
+	char uid2[2];
+};
+
+static int try_bind_acpi_entry(struct acpi_device *adev, void *vdata)
+{
+	struct bind_acpi_data *data = (struct bind_acpi_data *)vdata;
+
+	if (acpi_dev_hid_uid_match(adev, data->hid1, data->uid2)) {
+		ACPI_COMPANION_SET(&data->ljca_i2c->adap.dev, adev);
+		return 1;
+	}
+
+	return 0;
+}
+
 static void try_bind_acpi(struct platform_device *pdev,
 			  struct ljca_i2c_dev *ljca_i2c)
 {
-	struct acpi_device *parent, *child;
+	struct acpi_device *parent;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6,0,0))
+	struct acpi_device *child;
+#endif
 	struct acpi_device *cur = ACPI_COMPANION(&pdev->dev);
-	const char *hid1;
-	const char *uid1;
-	char uid2[2] = { 0 };
+	struct bind_acpi_data data = { .uid2 = {0} };
 
 	if (!cur)
 		return;
 
-	hid1 = acpi_device_hid(cur);
-	uid1 = acpi_device_uid(cur);
-	snprintf(uid2, sizeof(uid2), "%d", ljca_i2c->ctr_info->id);
+	data.hid1 = acpi_device_hid(cur);
+	data.uid1 = acpi_device_uid(cur);
+	snprintf(data.uid2, sizeof(data.uid2), "%d", ljca_i2c->ctr_info->id);
 
 	/*
 	* If the pdev is bound to the right acpi device, just forward it to the
 	* adapter. Otherwise, we find that of current adapter manually.
 	*/
-	if (!uid1 || !strcmp(uid1, uid2)) {
+	if (!data.uid1 || !strcmp(data.uid1, data.uid2)) {
 		ACPI_COMPANION_SET(&ljca_i2c->adap.dev, cur);
 		return;
 	}
 
-	dev_dbg(&pdev->dev, "hid %s uid %s new uid%s\n", hid1, uid1, uid2);
+	dev_dbg(&pdev->dev, "hid %s uid %s new uid%s\n",
+			data.hid1, data.uid1, data.uid2);
 	parent = ACPI_COMPANION(pdev->dev.parent);
 	if (!parent)
 		return;
 
+	data.ljca_i2c = ljca_i2c;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6,0,0))
 	list_for_each_entry(child, &parent->children, node) {
-		if (acpi_dev_hid_uid_match(child, hid1, uid2)) {
-			ACPI_COMPANION_SET(&ljca_i2c->adap.dev, child);
+		if (try_bind_acpi_entry(child, &data))
 			return;
-		}
 	}
+#else
+	acpi_dev_for_each_child(parent, try_bind_acpi_entry, &data);
+#endif
 }
 
 static int ljca_i2c_probe(struct platform_device *pdev)

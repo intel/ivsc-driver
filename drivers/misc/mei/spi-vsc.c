@@ -35,6 +35,20 @@ static const struct acpi_gpio_mapping mei_vsc_acpi_gpios[] = {
 	{}
 };
 
+static int find_cvfd_child_adev_entry(struct acpi_device *adev, void *data)
+{
+	if (!strcmp(CVFD_ACPI_ID_TGL, acpi_device_hid(adev)) ||
+	    !strcmp(CVFD_ACPI_ID_ADL, acpi_device_hid(adev)) ||
+	    !strcmp(CVFD_ACPI_ID_RPL, acpi_device_hid(adev))) {
+		if (data)
+			*(struct acpi_device **)data = adev;
+
+		return 1;
+	}
+
+	return 0;
+}
+
 static struct acpi_device *find_cvfd_child_adev(struct acpi_device *parent)
 {
 	struct acpi_device *adev;
@@ -42,12 +56,16 @@ static struct acpi_device *find_cvfd_child_adev(struct acpi_device *parent)
 	if (!parent)
 		return NULL;
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6,0,0))
 	list_for_each_entry (adev, &parent->children, node) {
-		if (!strcmp(CVFD_ACPI_ID_TGL, acpi_device_hid(adev)) ||
-		    !strcmp(CVFD_ACPI_ID_ADL, acpi_device_hid(adev)) ||
-		    !strcmp(CVFD_ACPI_ID_RPL, acpi_device_hid(adev)))
+		if (find_cvfd_child_adev_entry(adev, NULL))
 			return adev;
 	}
+#else
+	adev = NULL;
+	if (acpi_dev_for_each_child(parent, find_cvfd_child_adev_entry, &adev))
+		return adev;
+#endif
 
 	return NULL;
 }
