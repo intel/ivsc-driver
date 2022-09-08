@@ -141,6 +141,9 @@ struct ljca_gpio_descriptor {
 #define USB_WRITE_ACK_TIMEOUT 500
 #define USB_ENUM_STUB_TIMEOUT 20
 
+
+#define LJCA_AUTO_SUSPEND_TIMER 10000
+
 struct ljca_event_cb_entry {
 	struct platform_device *pdev;
 	ljca_event_cb_t notify;
@@ -1116,6 +1119,9 @@ static int ljca_probe(struct usb_interface *intf,
 			ljca->cell_count);
 		goto error_stop;
 	}
+
+	usb_enable_autosuspend(ljca->udev);
+	pm_runtime_set_autosuspend_delay(&ljca->udev->dev, LJCA_AUTO_SUSPEND_TIMER);
 
 	ljca->state = LJCA_STARTED;
 	dev_info(&intf->dev, "LJCA USB device init success\n");
