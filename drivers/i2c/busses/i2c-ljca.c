@@ -10,6 +10,7 @@
 #include <linux/mfd/ljca.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/version.h>
 
 /* I2C commands */
 enum i2c_cmd {
@@ -322,14 +323,33 @@ static const struct i2c_algorithm ljca_i2c_algo = {
 	.functionality = ljca_i2c_func,
 };
 
+struct match_ids_walk_data {
+	struct acpi_device *adev;
+	const char *hid1;
+	const char *uid2;
+};
+
+static int match_device_ids(struct acpi_device *adev, void *data)
+{
+	struct match_ids_walk_data *wd = data;
+
+	if (acpi_dev_hid_uid_match(adev, wd->hid1, wd->uid2)) {
+		wd->adev = adev;
+		return 1;
+	}
+
+	return 0;
+}
+
 static void try_bind_acpi(struct platform_device *pdev,
 			  struct ljca_i2c_dev *ljca_i2c)
 {
-	struct acpi_device *parent, *child;
+	struct acpi_device *parent;
 	struct acpi_device *cur = ACPI_COMPANION(&pdev->dev);
 	const char *hid1;
 	const char *uid1;
 	char uid2[2] = { 0 };
+	struct match_ids_walk_data wd = { 0 };
 
 	if (!cur)
 		return;
@@ -347,17 +367,24 @@ static void try_bind_acpi(struct platform_device *pdev,
 		return;
 	}
 
-	dev_dbg(&pdev->dev, "hid %s uid %s new uid%s\n", hid1, uid1, uid2);
+	dev_info(&pdev->dev, "hid %s uid %s new uid%s\n", hid1, uid1, uid2);
 	parent = ACPI_COMPANION(pdev->dev.parent);
 	if (!parent)
 		return;
 
-	list_for_each_entry(child, &parent->children, node) {
-		if (acpi_dev_hid_uid_match(child, hid1, uid2)) {
-			ACPI_COMPANION_SET(&ljca_i2c->adap.dev, child);
+	wd.hid1 = hid1;
+	wd.uid2 = uid2;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)
+	acpi_dev_for_each_child(parent, match_device_ids, &wd);
+	ACPI_COMPANION_SET(&ljca_i2c->adap.dev, wd.adev);
+#else
+	list_for_each_entry(wd.adev, &parent->children, node) {
+		if (match_device_ids(wd.adev, &wd)) {
+			ACPI_COMPANION_SET(&ljca_i2c->adap.dev, wd.adev);
 			return;
 		}
 	}
+#endif
 }
 
 static int ljca_i2c_probe(struct platform_device *pdev)
