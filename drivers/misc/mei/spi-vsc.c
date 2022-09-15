@@ -35,21 +35,52 @@ static const struct acpi_gpio_mapping mei_vsc_acpi_gpios[] = {
 	{}
 };
 
+static struct acpi_device_id cvfd_ids[] = {
+	{
+		.id = CVFD_ACPI_ID_TGL,
+	},
+	{
+		.id = CVFD_ACPI_ID_ADL,
+	},
+	{
+		.id = CVFD_ACPI_ID_RPL,
+	},
+};
+
+struct match_ids_walk_data {
+	struct acpi_device *adev;
+};
+
+static int match_device_ids(struct acpi_device *adev, void *data)
+{
+	struct match_ids_walk_data *wd = data;
+
+	if (!acpi_match_device_ids(adev, cvfd_ids)) {
+		wd->adev = adev;
+		return 1;
+	}
+
+	return 0;
+}
+
 static struct acpi_device *find_cvfd_child_adev(struct acpi_device *parent)
 {
-	struct acpi_device *adev;
+	struct match_ids_walk_data wd = { 0 };
 
 	if (!parent)
 		return NULL;
 
-	list_for_each_entry (adev, &parent->children, node) {
-		if (!strcmp(CVFD_ACPI_ID_TGL, acpi_device_hid(adev)) ||
-		    !strcmp(CVFD_ACPI_ID_ADL, acpi_device_hid(adev)) ||
-		    !strcmp(CVFD_ACPI_ID_RPL, acpi_device_hid(adev)))
-			return adev;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)
+	acpi_dev_for_each_child(parent, match_device_ids, &wd);
+	return wd.adev;
+#else
+	list_for_each_entry(wd.adev, &parent->children, node) {
+		if (match_device_ids(wd.adev, &wd))
+			return wd.adev;
 	}
 
 	return NULL;
+#endif
 }
 
 static int get_sensor_name(struct mei_device *dev)
