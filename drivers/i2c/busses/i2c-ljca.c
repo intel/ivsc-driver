@@ -327,13 +327,15 @@ struct match_ids_walk_data {
 	struct acpi_device *adev;
 	const char *hid1;
 	const char *uid2;
+	const char *uid2_v2;
 };
 
 static int match_device_ids(struct acpi_device *adev, void *data)
 {
 	struct match_ids_walk_data *wd = data;
 
-	if (acpi_dev_hid_uid_match(adev, wd->hid1, wd->uid2)) {
+	if (acpi_dev_hid_uid_match(adev, wd->hid1, wd->uid2) ||
+	    acpi_dev_hid_uid_match(adev, wd->hid1, wd->uid2_v2)) {
 		wd->adev = adev;
 		return 1;
 	}
@@ -349,6 +351,7 @@ static void try_bind_acpi(struct platform_device *pdev,
 	const char *hid1;
 	const char *uid1;
 	char uid2[2] = { 0 };
+	char uid2_v2[5] = { 0 };
 	struct match_ids_walk_data wd = { 0 };
 
 	if (!cur)
@@ -357,12 +360,13 @@ static void try_bind_acpi(struct platform_device *pdev,
 	hid1 = acpi_device_hid(cur);
 	uid1 = acpi_device_uid(cur);
 	snprintf(uid2, sizeof(uid2), "%d", ljca_i2c->ctr_info->id);
+	snprintf(uid2_v2, sizeof(uid2_v2), "VIC%d", ljca_i2c->ctr_info->id);
 
 	/*
 	* If the pdev is bound to the right acpi device, just forward it to the
 	* adapter. Otherwise, we find that of current adapter manually.
 	*/
-	if (!uid1 || !strcmp(uid1, uid2)) {
+	if (!uid1 || !strcmp(uid1, uid2) || !strcmp(uid1, uid2_v2)) {
 		ACPI_COMPANION_SET(&ljca_i2c->adap.dev, cur);
 		return;
 	}
@@ -374,6 +378,7 @@ static void try_bind_acpi(struct platform_device *pdev,
 
 	wd.hid1 = hid1;
 	wd.uid2 = uid2;
+	wd.uid2_v2 = uid2_v2;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)
 	acpi_dev_for_each_child(parent, match_device_ids, &wd);
 	ACPI_COMPANION_SET(&ljca_i2c->adap.dev, wd.adev);
