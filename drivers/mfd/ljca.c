@@ -566,7 +566,7 @@ static void ljca_read_complete(struct urb *urb)
 			header->type, header->len);
 
 resubmit:
-	ret = usb_submit_urb(urb, GFP_KERNEL);
+	ret = usb_submit_urb(urb, GFP_ATOMIC);
 	if (ret)
 		dev_err(&ljca->intf->dev,
 			"failed submitting read urb, error %d\n", ret);
