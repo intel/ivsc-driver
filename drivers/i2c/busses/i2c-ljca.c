@@ -427,7 +427,16 @@ static int ljca_i2c_probe(struct platform_device *pdev)
 		return -EIO;
 	}
 
-	return i2c_add_adapter(&ljca_i2c->adap);
+	ret = i2c_add_adapter(&ljca_i2c->adap);
+	if (ret)
+		return ret;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
+	if (has_acpi_companion(&ljca_i2c->adap.dev))
+		acpi_dev_clear_dependencies(ACPI_COMPANION(&ljca_i2c->adap.dev));
+#endif
+
+	return 0;
 }
 
 static int ljca_i2c_remove(struct platform_device *pdev)
