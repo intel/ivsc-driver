@@ -364,6 +364,7 @@ struct mei_vsc_hw {
 	u8 tx_buf1[MAX_XFER_BUFFER_SIZE];
 	u8 rx_buf1[MAX_XFER_BUFFER_SIZE];
 
+	struct work_struct probe_work;
 	struct mutex mutex;
 	bool disconnect;
 	atomic_t lock_cnt;
