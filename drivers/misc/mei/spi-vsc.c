@@ -133,6 +133,37 @@ static int get_sensor_name(struct mei_device *dev)
 	return 0;
 }
 
+static void mei_vsc_probe_work(struct work_struct *work)
+{
+	struct mei_vsc_hw *hw = container_of(work, struct mei_vsc_hw, probe_work);
+	struct spi_device *spi = hw->spi;
+	struct mei_device *dev = spi_get_drvdata(spi);
+	int ret;
+
+	if (mei_start(dev)) {
+		dev_err(&spi->dev, "init hw failure.\n");
+		goto release_irq;
+	}
+
+	ret = mei_register(dev, &spi->dev);
+	if (ret) {
+		dev_err(&spi->dev, "mei_register failure.\n");
+		goto stop;
+	}
+
+	pm_runtime_enable(dev->dev);
+	dev_dbg(&spi->dev, "initialization successful.\n");
+
+	return;
+
+stop:
+	mei_stop(dev);
+release_irq:
+	mei_cancel_work(dev);
+	mei_disable_interrupts(dev);
+	free_irq(hw->wakeuphostint, dev);
+}
+
 static int mei_vsc_probe(struct spi_device *spi)
 {
 	struct mei_vsc_hw *hw;
@@ -144,6 +175,7 @@ static int mei_vsc_probe(struct spi_device *spi)
 		return -ENOMEM;
 
 	hw = to_vsc_hw(dev);
+	INIT_WORK(&hw->probe_work, mei_vsc_probe_work);
 	mutex_init(&hw->mutex);
 	init_waitqueue_head(&hw->xfer_wait);
 	hw->spi = spi;
@@ -186,27 +218,13 @@ static int mei_vsc_probe(struct spi_device *spi)
 				   mei_vsc_irq_thread_handler,
 				   IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 				   KBUILD_MODNAME, dev);
-	if (mei_start(dev)) {
-		dev_err(&spi->dev, "init hw failure.\n");
-		ret = -ENODEV;
-		goto release_irq;
-	}
 
-	ret = mei_register(dev, &spi->dev);
 	if (ret)
-		goto stop;
+		return ret;
 
-	pm_runtime_enable(dev->dev);
-	dev_dbg(&spi->dev, "initialization successful.\n");
+	schedule_work(&hw->probe_work);
+
 	return 0;
-
-stop:
-	mei_stop(dev);
-release_irq:
-	mei_cancel_work(dev);
-	mei_disable_interrupts(dev);
-	free_irq(hw->wakeuphostint, dev);
-	return ret;
 }
 
 static int __maybe_unused mei_vsc_suspend(struct device *device)
@@ -267,6 +285,7 @@ static void mei_vsc_remove(struct spi_device *spi)
 
 	dev_info(&spi->dev, "%s %d", __func__, hw->wakeuphostint);
 
+	cancel_work_sync(&hw->probe_work);
 	pm_runtime_disable(dev->dev);
 	hw->disconnect = true;
 	mei_stop(dev);
@@ -294,6 +313,7 @@ static void mei_vsc_shutdown(struct spi_device *spi)
 	struct mei_vsc_hw *hw = to_vsc_hw(dev);
 
 	dev_dbg(dev->dev, "shutdown\n");
+	cancel_work_sync(&hw->probe_work);
 	hw->disconnect = true;
 	mei_stop(dev);
 
