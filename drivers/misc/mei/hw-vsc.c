@@ -1627,7 +1627,11 @@ struct mei_device *mei_vsc_dev_init(struct device *parent)
 	if (!dev)
 		return NULL;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
+	mei_device_init(dev, parent, false, &mei_vsc_hw_ops);
+#else
 	mei_device_init(dev, parent, &mei_vsc_hw_ops);
+#endif
 	dev->fw_f_fw_ver_supported = 0;
 	dev->kind = 0;
 	return dev;
