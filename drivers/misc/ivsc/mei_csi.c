@@ -380,7 +380,7 @@ static int mei_csi_probe(struct mei_cl_device *cldev,
 		goto err_disable;
 	}
 
-	vsc_register_csi(csi, &csi_ops);
+	vsc_register_csi(&cldev->dev, csi, &csi_ops);
 
 	return 0;
 

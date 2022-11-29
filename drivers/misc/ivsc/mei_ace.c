@@ -508,7 +508,7 @@ static int mei_ace_probe(struct mei_cl_device *cldev,
 
 	trigger_get_fw_id(ace);
 
-	vsc_register_ace(ace, &ace_ops);
+	vsc_register_ace(&cldev->dev, ace, &ace_ops);
 	return 0;
 
 err_disable:

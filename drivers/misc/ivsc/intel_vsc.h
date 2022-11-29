@@ -152,7 +152,7 @@ struct vsc_csi_ops {
  *
  * @return 0 on success, negative on failure
  */
-int vsc_register_ace(void *ace, struct vsc_ace_ops *ops);
+int vsc_register_ace(struct device *dev, void *ace, struct vsc_ace_ops *ops);
 
 /**
  * @brief unregister ace client
@@ -167,7 +167,7 @@ void vsc_unregister_ace(void);
  *
  * @return 0 on success, negative on failure
  */
-int vsc_register_csi(void *csi, struct vsc_csi_ops *ops);
+int vsc_register_csi(struct device *dev, void *csi, struct vsc_csi_ops *ops);
 
 /**
  * @brief unregister csi client

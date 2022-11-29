@@ -104,6 +104,7 @@ static int get_sensor_name(struct mei_device *dev)
 		return -ENODEV;
 	}
 
+	ACPI_COMPANION_SET(&spi->dev, adev);
 	obj.integer.value = LINK_NUMBER;
 	status = acpi_evaluate_object(adev->handle, METHOD_NAME_SID, &arg_list,
 				      &buffer);
@@ -181,30 +182,26 @@ static int mei_vsc_probe(struct spi_device *spi)
 	hw->spi = spi;
 	spi_set_drvdata(spi, dev);
 
-	ret = get_sensor_name(dev);
-	if (ret)
-		return ret;
-
 	ret = devm_acpi_dev_add_driver_gpios(&spi->dev, mei_vsc_acpi_gpios);
 	if (ret) {
 		dev_err(&spi->dev, "%s: fail to add gpio\n", __func__);
-		return -EBUSY;
+		return ret;
 	}
 
 	hw->wakeuphost = devm_gpiod_get(&spi->dev, "wakeuphost", GPIOD_IN);
 	if (IS_ERR(hw->wakeuphost)) {
 		dev_err(&spi->dev, "gpio get irq failed\n");
-		return -EINVAL;
+		return PTR_ERR(hw->wakeuphost);
 	}
 	hw->resetfw = devm_gpiod_get(&spi->dev, "resetfw", GPIOD_OUT_HIGH);
 	if (IS_ERR(hw->resetfw)) {
 		dev_err(&spi->dev, "gpio get resetfw failed\n");
-		return -EINVAL;
+		return PTR_ERR(hw->resetfw);
 	}
 	hw->wakeupfw = devm_gpiod_get(&spi->dev, "wakeupfw", GPIOD_OUT_HIGH);
 	if (IS_ERR(hw->wakeupfw)) {
 		dev_err(&spi->dev, "gpio get wakeupfw failed\n");
-		return -EINVAL;
+		return PTR_ERR(hw->wakeupfw);
 	}
 
 	ret = acpi_dev_gpio_irq_get_by(ACPI_COMPANION(&spi->dev),
@@ -221,6 +218,12 @@ static int mei_vsc_probe(struct spi_device *spi)
 
 	if (ret)
 		return ret;
+
+	pr_info("before acpi dev name %s\n", acpi_dev_name(ACPI_COMPANION(&spi->dev)));
+	ret = get_sensor_name(dev);
+	if (ret)
+		return ret;
+	pr_info("after acpi dev name %s\n", acpi_dev_name(ACPI_COMPANION(&spi->dev)));
 
 	schedule_work(&hw->probe_work);
 
