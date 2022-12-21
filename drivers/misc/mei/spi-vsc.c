@@ -194,17 +194,19 @@ static int mei_vsc_probe(struct spi_device *spi)
 	hw->wakeuphost = devm_gpiod_get(&spi->dev, "wakeuphost", GPIOD_IN);
 	if (IS_ERR(hw->wakeuphost)) {
 		dev_err(&spi->dev, "gpio get irq failed\n");
-		return -EINVAL;
+		return PTR_ERR(hw->wakeuphost);
 	}
+
 	hw->resetfw = devm_gpiod_get(&spi->dev, "resetfw", GPIOD_OUT_HIGH);
 	if (IS_ERR(hw->resetfw)) {
 		dev_err(&spi->dev, "gpio get resetfw failed\n");
-		return -EINVAL;
+		return PTR_ERR(hw->resetfw);
 	}
+
 	hw->wakeupfw = devm_gpiod_get(&spi->dev, "wakeupfw", GPIOD_OUT_HIGH);
 	if (IS_ERR(hw->wakeupfw)) {
 		dev_err(&spi->dev, "gpio get wakeupfw failed\n");
-		return -EINVAL;
+		return PTR_ERR(hw->wakeupfw);
 	}
 
 	ret = acpi_dev_gpio_irq_get_by(ACPI_COMPANION(&spi->dev),
