@@ -16,9 +16,6 @@
 
 #include "hw-vsc.h"
 
-#define CVFD_ACPI_ID_TGL "INTC1059"
-#define CVFD_ACPI_ID_ADL "INTC1095"
-#define CVFD_ACPI_ID_RPL "INTC100A"
 #define LINK_NUMBER (1)
 #define METHOD_NAME_SID "SID"
 
@@ -37,13 +34,16 @@ static const struct acpi_gpio_mapping mei_vsc_acpi_gpios[] = {
 
 static struct acpi_device_id cvfd_ids[] = {
 	{
-		.id = CVFD_ACPI_ID_TGL,
+		.id = "INTC1059",
 	},
 	{
-		.id = CVFD_ACPI_ID_ADL,
+		.id = "INTC1095",
 	},
 	{
-		.id = CVFD_ACPI_ID_RPL,
+		.id = "INTC100A",
+	},
+	{
+		.id = "INTC10CF",
 	},
 };
 
@@ -329,9 +329,10 @@ static const struct dev_pm_ops mei_vsc_pm_ops = {
 };
 
 static const struct acpi_device_id mei_vsc_acpi_ids[] = {
-	{ "INTC1058", 1 },
-	{ "INTC1094", 1 },
-	{ "INTC1009", 1 }, /* RPL */
+	{ "INTC1058"},
+	{ "INTC1094"},
+	{ "INTC1009"}, /* RPL */
+	{ "INTC10D0"}, /* MTL */
 	{},
 };
 MODULE_DEVICE_TABLE(acpi, mei_vsc_acpi_ids);
