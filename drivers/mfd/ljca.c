@@ -29,6 +29,7 @@ static char *gpio_hids[] = {
 	"INTC1074", /* TGL */
 	"INTC1096", /* ADL */
 	"INTC100B", /* RPL */
+	"INTC10D1", /* MTL */
 };
 static struct mfd_cell_acpi_match ljca_acpi_match_gpio;
 
@@ -36,6 +37,7 @@ static char *i2c_hids[] = {
 	"INTC1075", /* TGL */
 	"INTC1097", /* ADL */
 	"INTC100C", /* RPL */
+	"INTC10D2", /* MTL */
 };
 static struct mfd_cell_acpi_match ljca_acpi_match_i2cs[2];
 
@@ -43,6 +45,7 @@ static char *spi_hids[] = {
 	"INTC1091", /* TGL */
 	"INTC1098", /* ADL */
 	"INTC100D", /* RPL */
+	"INTC10D3", /* MTL */
 };
 static struct mfd_cell_acpi_match ljca_acpi_match_spis[1];
 
