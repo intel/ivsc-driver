@@ -211,55 +211,94 @@ struct ljca_dev {
 	struct mutex mutex;
 };
 
-static int try_match_acpi_hid(struct acpi_device *child,
-			      struct mfd_cell_acpi_match *match, char **hids,
-			      int hids_num)
+/* parent of sub-devices */
+struct device *sub_dev_parent;
+struct device *cur_dev;
+
+static int try_match_acpi_hid(struct acpi_device *child, char **hids, int hids_num)
 {
 	struct acpi_device_id ids[2] = {};
 	int i;
 
 	for (i = 0; i < hids_num; i++) {
 		strlcpy(ids[0].id, hids[i], sizeof(ids[0].id));
-		if (!acpi_match_device_ids(child, ids)) {
-			match->pnpid = hids[i];
-			break;
-		}
+		if (!acpi_match_device_ids(child, ids))
+			return i;
 	}
 
-	return 0;
+	return -ENODEV;
 }
 
 static int match_device_ids(struct acpi_device *adev, void *data)
 {
-	(void)data;
-	try_match_acpi_hid(adev, &ljca_acpi_match_gpio, gpio_hids,
-			   ARRAY_SIZE(gpio_hids));
-	try_match_acpi_hid(adev, &ljca_acpi_match_i2cs[0], i2c_hids,
-			   ARRAY_SIZE(i2c_hids));
-	try_match_acpi_hid(adev, &ljca_acpi_match_i2cs[1], i2c_hids,
-			   ARRAY_SIZE(i2c_hids));
-	try_match_acpi_hid(adev, &ljca_acpi_match_spis[0], spi_hids,
-			   ARRAY_SIZE(spi_hids));
+	int ret;
+	int *child_count = data;
+
+	dev_dbg(&adev->dev, "adev->dep_unmet %d %d\n", adev->dep_unmet, *child_count);
+
+	/* dependency not ready */
+	if (adev->dep_unmet)
+		return -ENODEV;
+
+	ret = try_match_acpi_hid(adev, gpio_hids, ARRAY_SIZE(gpio_hids));
+	if (ret > 0) {
+		ljca_acpi_match_gpio.pnpid = gpio_hids[ret];
+		(*child_count)++;
+	}
+
+	ret = try_match_acpi_hid(adev, i2c_hids, ARRAY_SIZE(i2c_hids));
+	if (ret > 0) {
+		ljca_acpi_match_i2cs[0].pnpid = i2c_hids[ret];
+		ljca_acpi_match_i2cs[1].pnpid = i2c_hids[ret];
+		(*child_count)++;
+	}
+
+	ret = try_match_acpi_hid(adev, spi_hids, ARRAY_SIZE(spi_hids));
+	if (ret > 0) {
+		ljca_acpi_match_spis[0].pnpid = spi_hids[ret];
+		(*child_count)++;
+	}
 
 	return 0;
 }
 
 static int precheck_acpi_hid(struct usb_interface *intf)
 {
-	struct acpi_device *parent;
+	struct device *parents[2];
+	int i;
+	int child_count;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 0, 0)
 	struct acpi_device *child;
 #endif
 
-	parent = ACPI_COMPANION(&intf->dev);
-	if (!parent)
+	parents[0] = &intf->dev;
+	parents[1] = intf->dev.parent->parent;
+	if (!parents[0] || !parents[1])
 		return -ENODEV;
 
+	acpi_dev_clear_dependencies(ACPI_COMPANION(parents[0]));
+	sub_dev_parent = parents[0];
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)
-	acpi_dev_for_each_child(parent, match_device_ids, NULL);
+	for (i = 0; i < ARRAY_SIZE(parents); i++) {
+		child_count = 0;
+		acpi_dev_for_each_child(ACPI_COMPANION(parents[i]), match_device_ids, &child_count);
+		if (child_count > 0) {
+			sub_dev_parent = parents[i];
+			break;
+		}
+	}
 #else
-	list_for_each_entry (child, &parent->children, node) {
-		match_device_ids(child, NULL);
+	for (i = 0; i < ARRAY_SIZE(parents); i++) {
+		child_count = 0;
+		list_for_each_entry(child, &(ACPI_COMPANION(parents[i])->children), node) {
+			match_device_ids(child, &child_count);
+		}
+
+		if (child_count > 0) {
+			sub_dev_parent = parents[i];
+			break;
+		}
 	}
 #endif
 
@@ -443,7 +482,7 @@ static int ljca_transfer_internal(struct platform_device *pdev, u8 cmd,
 	if (!pdev)
 		return -EINVAL;
 
-	ljca = dev_get_drvdata(pdev->dev.parent);
+	ljca = dev_get_drvdata(cur_dev);
 	ljca_pdata = dev_get_platdata(&pdev->dev);
 	stub = ljca_stub_find(ljca, ljca_pdata->type);
 	if (IS_ERR(stub))
@@ -480,7 +519,7 @@ int ljca_register_event_cb(struct platform_device *pdev,
 	if (!pdev)
 		return -EINVAL;
 
-	ljca = dev_get_drvdata(pdev->dev.parent);
+	ljca = dev_get_drvdata(cur_dev);
 	ljca_pdata = dev_get_platdata(&pdev->dev);
 	stub = ljca_stub_find(ljca, ljca_pdata->type);
 	if (IS_ERR(stub))
@@ -502,7 +541,7 @@ void ljca_unregister_event_cb(struct platform_device *pdev)
 	struct ljca_stub *stub;
 	unsigned long flags;
 
-	ljca = dev_get_drvdata(pdev->dev.parent);
+	ljca = dev_get_drvdata(cur_dev);
 	ljca_pdata = dev_get_platdata(&pdev->dev);
 	stub = ljca_stub_find(ljca, ljca_pdata->type);
 	if (IS_ERR(stub))
@@ -1068,6 +1107,7 @@ static int ljca_probe(struct usb_interface *intf,
 	struct usb_endpoint_descriptor *bulk_in, *bulk_out;
 	int ret;
 
+	cur_dev = &intf->dev;
 	ret = precheck_acpi_hid(intf);
 	if (ret)
 		return ret;
@@ -1128,7 +1168,7 @@ static int ljca_probe(struct usb_interface *intf,
 		goto error_stop;
 	}
 
-	ret = mfd_add_hotplug_devices(&intf->dev, ljca->cells,
+	ret = mfd_add_hotplug_devices(sub_dev_parent, ljca->cells,
 				      ljca->cell_count);
 	if (ret) {
 		dev_err(&intf->dev, "failed to add mfd devices to core %d\n",
@@ -1157,7 +1197,7 @@ static void ljca_disconnect(struct usb_interface *intf)
 
 	ljca_stop(ljca);
 	ljca->state = LJCA_STOPPED;
-	mfd_remove_devices(&intf->dev);
+	mfd_remove_devices(sub_dev_parent);
 	ljca_stub_cleanup(ljca);
 	usb_set_intfdata(intf, NULL);
 	ljca_delete(ljca);
