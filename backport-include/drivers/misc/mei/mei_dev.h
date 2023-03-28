@@ -14,6 +14,13 @@
 #include <linux/mei_cl_bus.h>
 #include <linux/version.h>
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(6, 3, 0)
+static inline int uuid_le_cmp(const uuid_le u1, const uuid_le u2)
+{
+	return memcmp(&u1, &u2, sizeof(uuid_le));
+}
+#endif
+
 #include "hw.h"
 #include "hbm.h"
 
@@ -123,6 +130,8 @@ enum mei_cl_io_mode {
 	MEI_CL_IO_TX_INTERNAL = BIT(1),
 
 	MEI_CL_IO_RX_NONBLOCK = BIT(2),
+
+	MEI_CL_IO_SGL         = BIT(3),
 };
 
 /*
@@ -219,6 +228,9 @@ struct mei_cl_cb {
 	int status;
 	u32 internal:1;
 	u32 blocking:1;
+#if LINUX_VERSION_CODE > KERNEL_VERSION(6, 2, 0)
+	struct mei_ext_hdr *ext_hdr;
+#endif
 };
 
 /**
@@ -379,6 +391,10 @@ ssize_t __mei_cl_send(struct mei_cl *cl, u8 *buf, size_t length, u8 vtag,
 #else
 ssize_t __mei_cl_send(struct mei_cl *cl, const u8 *buf, size_t length, u8 vtag,
 		      unsigned int mode);
+#endif
+#if LINUX_VERSION_CODE > KERNEL_VERSION(6, 2, 0)
+ssize_t __mei_cl_send_timeout(struct mei_cl *cl, const u8 *buf, size_t length, u8 vtag,
+			      unsigned int mode, unsigned long timeout);
 #endif
 ssize_t __mei_cl_recv(struct mei_cl *cl, u8 *buf, size_t length, u8 *vtag,
 		      unsigned int mode, unsigned long timeout);
@@ -598,6 +614,7 @@ struct mei_device {
 	unsigned int hbm_f_vt_supported:1;
 	unsigned int hbm_f_cap_supported:1;
 	unsigned int hbm_f_cd_supported:1;
+	unsigned int hbm_f_gsc_supported:1;
 
 	struct mei_fw_version fw_ver[MEI_MAX_FW_VER_BLOCKS];
 
