@@ -1,179 +1,173 @@
-/* SPDX-License-Identifier: GPL-2.0 */
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2021, Intel Corporation. All rights reserved.
+ * Copyright (c) 2023, Intel Corporation. All rights reserved.
  * Intel Management Engine Interface (Intel MEI) Linux driver
  */
 
-#ifndef _MEI_HW_SPI_H_
-#define _MEI_HW_SPI_H_
+#ifndef _MEI_HW_VSC_H_
+#define _MEI_HW_VSC_H_
 
-#include <linux/irqreturn.h>
-#include <linux/spi/spi.h>
+#include <linux/bitfield.h>
+#include <linux/bits.h>
 #include <linux/mei.h>
-#include <linux/types.h>
 
 #include "mei_dev.h"
 
-struct mei_cfg {
-	const struct mei_fw_status fw_status;
-	const char *kind;
-	u32 fw_ver_supported : 1;
-	u32 hw_trc_supported : 1;
+/* IPSC */
+#define VSC_MAGIC_NUM 0x49505343
+/* FVCS */
+#define VSC_FILE_MAGIC 0x46564353
+/* IWFS */
+#define VSC_FW_MAGIC 0x49574653
+
+#define VSC_ROM_PKG_SIZE 256
+#define VSC_FW_PKG_SIZE 512
+
+/* memory size is 0x51000000 */
+#define VSC_IMG_MAX_LOC (0x51000000 - 1)
+#define VSC_FW_MAX_SIZE 0x200000
+#define VSC_SKU_CONFIG_LOC 0x5001A000
+#define VSC_SKU_MAX_SIZE 4100
+
+#define VSC_IMG_DMA_ENABLE_OPTION BIT(0)
+
+#define VSC_SIG_SIZE 384
+#define VSC_PUBKEY_SIZE 384
+#define VSC_CSSHEADER_SIZE 128
+
+enum {
+	VSC_CMD_QUERY,
+	VSC_CMD_DL_SET,
+	VSC_CMD_DL_START,
+	VSC_CMD_DL_CONT,
+	VSC_CMD_DUMP_MEM,
+	VSC_CMD_SET_REG,
+	VSC_CMD_PRINT_ROM_VERSION,
+	VSC_CMD_WRITE_FLASH,
+	VSC_CMD_RESERVED,
 };
 
-enum FRAG_TYPE {
-	BOOT_IMAGE_TYPE,
-	ARC_SEM_IMG_TYPE,
-	EM7D_IMG_TYPE,
-	ACER_IMG_TYPE,
-	ACEV_IMG_TYPE,
-	ACEC_IMG_TYPE,
-	SKU_CONF_TYPE,
-	FRAGMENT_TYPE_MAX,
+enum vsc_image_type {
+	VSC_IMG_DEBUG,
+	VSC_IMG_BOOTLOADER,
+	VSC_IMG_EM7D,
+	VSC_IMG_ARCSEM,
+	VSC_IMG_ACE_RUNTIME,
+	VSC_IMG_ACE_VISION,
+	VSC_IMG_ACE_CONFIG,
+	VSC_IMG_SKU_CONFIG,
 };
 
-struct fragment {
-	enum FRAG_TYPE type;
+/* Firmware Image count define */
+#define VSC_IMG_ACEV_ACECNF 2
+#define VSC_IMG_BOOT_ARC_EM7D 3
+#define VSC_IMG_BOOT_ARC_ACER_EM7D 4
+#define VSC_IMG_BOOT_ARC_ACER_ACEV_EM7D 5
+#define VSC_IMG_BOOT_ARC_ACER_ACEV_ACECNF_EM7D 6
+#define VSC_IMG_ARC_ACER_ACEV_ACECNF_EM7D (VSC_IMG_BOOT_ARC_ACER_ACEV_ACECNF_EM7D - 1)
+#define VSC_IMG_CNT_MAX VSC_IMG_BOOT_ARC_ACER_ACEV_ACECNF_EM7D
+
+enum {
+	VSC_TOKEN_BOOTLOADER_REQ = 1,
+	VSC_TOKEN_FIRMWARE_REQ,
+	VSC_TOKEN_DOWNLOAD_CONT,
+	VSC_TOKEN_DUMP_RESP,
+	VSC_TOKEN_DUMP_CONT,
+	VSC_TOKEN_SKU_CONFIG_REQ,
+	VSC_TOKEN_ERROR,
+	VSC_TOKEN_DUMMY,
+	VSC_TOKEN_CAM_STATUS_RESP,
+	VSC_TOKEN_CAM_BOOT,
+};
+
+#define VSC_MAX_SVN_VALUE 0xFFFFFFFE
+
+#define VSC_EFUSE1_ADDR (0xE0030000 + 0x038)
+#define VSC_STRAP_ADDR (0xE0030000 + 0x100)
+
+#define VSC_SI_MAINSTEPPING_VERSION_MASK GENMASK(7, 4)
+#define VSC_SI_MAINSTEPPING_VERSION_A 0
+#define VSC_SI_MAINSTEPPING_VERSION_B 1
+#define VSC_SI_MAINSTEPPING_VERSION_C 2
+
+#define VSC_SI_SUBSTEPPING_VERSION_MASK GENMASK(3, 0)
+#define VSC_SI_SUBSTEPPING_VERSION_0 0
+#define VSC_SI_SUBSTEPPING_VERSION_0_PRIME 1
+#define VSC_SI_SUBSTEPPING_VERSION_1 2
+#define VSC_SI_SUBSTEPPING_VERSION_1_PRIME 3
+
+#define VSC_SI_STRAP_KEY_SRC_MASK BIT(16)
+
+#define VSC_SI_STRAP_KEY_SRC_DEBUG 0
+#define VSC_SI_STRAP_KEY_SRC_PRODUCT 1
+
+#define VSC_MEI_MAX_MSG_SIZE 512
+
+
+/* vsc image fragment type of each sub-module */
+enum vsc_img_frag_idx {
+	VSC_BOOT_IMG_FRAG,
+	VSC_ARC_SEM_IMG_FRAG,
+	VSC_ACER_IMG_FRAG,
+	VSC_ACEV_IMG_FRAG,
+	VSC_ACEC_IMG_FRAG,
+	VSC_EM7D_IMG_FRAG,
+	VSC_SKU_CONF_FRAG,
+	VSC_FRAG_MAX,
+};
+
+struct vsc_img_frag {
+	enum vsc_image_type type;
 	u32 location;
 	const u8 *data;
 	u32 size;
 };
 
-irqreturn_t mei_vsc_irq_quick_handler(int irq, void *dev_id);
-irqreturn_t mei_vsc_irq_thread_handler(int irq, void *dev_id);
-struct mei_device *mei_vsc_dev_init(struct device *parent);
-
-#define VSC_MAGIC_NUM 0x49505343
-#define VSC_FILE_MAGIC 0x46564353
-#define VSC_FW_MAGIC 0x49574653
-#define VSC_ROM_SPI_PKG_SIZE 256
-#define FW_SPI_PKG_SIZE 512
-
-#define IMG_MAX_LOC (0x50FFFFFF)
-#define FW_MAX_SIZE (0x200000)
-#define SKU_CONFIG_LOC (0x5001A000)
-#define SKU_MAX_SIZE (4100)
-
-#define IMG_DMA_ENABLE_OPTION (1 << 0)
-
-#define SIG_SIZE 384
-#define PUBKEY_SIZE 384
-#define CSSHEADER_SIZE 128
-
-#define VSC_CMD_QUERY 0
-#define VSC_CMD_DL_SET 1
-#define VSC_CMD_DL_START 2
-#define VSC_CMD_DL_CONT 3
-#define VSC_CMD_DUMP_MEM 4
-#define VSC_CMD_SET_REG 5
-#define VSC_CMD_PRINT_ROM_VERSION 6
-#define VSC_CMD_WRITE_FLASH 7
-#define VSC_CMD_RESERVED 8
-
-enum IMAGE_TYPE {
-	IMG_DEBUG,
-	IMG_BOOTLOADER,
-	IMG_EM7D,
-	IMG_ARCSEM,
-	IMG_ACE_RUNTIME,
-	IMG_ACE_VISION,
-	IMG_ACE_CONFIG,
-	IMG_SKU_CONFIG
-};
-
-/*image count define, refer to Clover Fall Boot ROM HLD 1.0*/
-#define IMG_ACEV_ACECNF 2
-#define IMG_BOOT_ARC_EM7D 3
-#define IMG_BOOT_ARC_ACER_EM7D 4
-#define IMG_BOOT_ARC_ACER_ACEV_EM7D 5
-#define IMG_BOOT_ARC_ACER_ACEV_ACECNF_EM7D 6
-#define IMG_ARC_ACER_ACEV_ACECNF_EM7D (IMG_BOOT_ARC_ACER_ACEV_ACECNF_EM7D - 1)
-#define IMG_CNT_MAX IMG_BOOT_ARC_ACER_ACEV_ACECNF_EM7D
-
-#define VSC_TOKEN_BOOTLOADER_REQ 1
-#define VSC_TOKEN_FIRMWARE_REQ 2
-#define VSC_TOKEN_DOWNLOAD_CONT 3
-#define VSC_TOKEN_DUMP_RESP 4
-#define VSC_TOKEN_DUMP_CONT 5
-#define VSC_TOKEN_SKU_CONFIG_REQ 6
-#define VSC_TOKEN_ERROR 7
-#define VSC_TOKEN_DUMMY 8
-#define VSC_TOKEN_CAM_STATUS_RESP 9
-#define VSC_TOKEN_CAM_BOOT 10
-
-#define MAX_SVN_VALUE (0xFFFFFFFE)
-
-#define EFUSE1_ADDR (0xE0030000 + 0x38)
-#define STRAP_ADDR (0xE0030000 + 0x100)
-
-#define SI_MAINSTEPPING_VERSION_OFFSET (4)
-#define SI_MAINSTEPPING_VERSION_MASK (0xF)
-#define SI_MAINSTEPPING_VERSION_A (0x0)
-#define SI_MAINSTEPPING_VERSION_B (0x1)
-#define SI_MAINSTEPPING_VERSION_C (0x2)
-
-#define SI_SUBSTEPPING_VERSION_OFFSET (0x0)
-#define SI_SUBSTEPPING_VERSION_MASK (0xF)
-#define SI_SUBSTEPPING_VERSION_0 (0x0)
-#define SI_SUBSTEPPING_VERSION_0_PRIME (0x1)
-#define SI_SUBSTEPPING_VERSION_1 (0x2)
-#define SI_SUBSTEPPING_VERSION_1_PRIME (0x3)
-
-#define SI_STRAP_KEY_SRC_OFFSET (16)
-#define SI_STRAP_KEY_SRC_MASK (0x1)
-
-#define SI_STRAP_KEY_SRC_DEBUG (0x0)
-#define SI_STRAP_KEY_SRC_PRODUCT (0x1)
-
 struct vsc_rom_master_frame {
 	u32 magic;
 	u8 cmd;
 	union {
+		/* download start */
 		struct {
 			u8 img_type;
 			u16 option;
 			u32 img_len;
 			u32 img_loc;
 			u32 crc;
-			u8 res[0];
+			u8 res[];
 		} __packed dl_start;
+		/* download set */
 		struct {
 			u8 option;
 			u16 img_cnt;
-			u32 payload[(VSC_ROM_SPI_PKG_SIZE - 8) / 4];
+			u32 payload[];
 		} __packed dl_set;
+		/* download continue */
 		struct {
 			u8 end_flag;
 			u16 len;
-			u8 payload[VSC_ROM_SPI_PKG_SIZE - 8];
+			/* 8 is the offset of payload */
+			u8 payload[VSC_ROM_PKG_SIZE - 8];
 		} __packed dl_cont;
+		/* dump memory */
 		struct {
 			u8 res;
 			u16 len;
 			u32 addr;
-#define ROM_DUMP_MEM_RESERVE_SIZE 12
-			u8 payload[VSC_ROM_SPI_PKG_SIZE -
-				   ROM_DUMP_MEM_RESERVE_SIZE];
+			u8 payload[];
 		} __packed dump_mem;
+		/* set register */
 		struct {
 			u8 res[3];
 			u32 addr;
 			u32 val;
-#define ROM_SET_REG_RESERVE_SIZE 16
-			u8 payload[VSC_ROM_SPI_PKG_SIZE -
-				   ROM_SET_REG_RESERVE_SIZE];
+			u8 payload[];
 		} __packed set_reg;
-		struct {
-			u8 ins[0];
-		} __packed undoc_f1;
-		struct {
-			u32 addr;
-			u32 len;
-			u8 payload[0];
-		} __packed os_dump_mem;
-		u8 reserve[VSC_ROM_SPI_PKG_SIZE - 5];
+		/* 5 is the offset of padding */
+		u8 padding[VSC_ROM_PKG_SIZE - 5];
 	} data;
 } __packed;
+static_assert(sizeof(struct vsc_rom_master_frame) == VSC_ROM_PKG_SIZE);
 
 struct vsc_fw_master_frame {
 	u32 magic;
@@ -185,48 +179,37 @@ struct vsc_fw_master_frame {
 			u32 img_len;
 			u32 img_loc;
 			u32 crc;
-			u8 res[0];
+			u8 res[];
 		} __packed dl_start;
 		struct {
 			u16 option;
 			u8 img_cnt;
-			u32 payload[(FW_SPI_PKG_SIZE - 8) / 4];
+			u32 payload[];
 		} __packed dl_set;
-		struct {
-			u8 end_flag;
-			u16 len;
-			u8 payload[FW_SPI_PKG_SIZE - 8];
-		} __packed dl_cont;
 		struct {
 			u32 addr;
 			u8 len;
-			u8 payload[0];
+			u8 payload[];
 		} __packed dump_mem;
 		struct {
 			u32 addr;
 			u32 val;
-			u8 payload[0];
+			u8 payload[];
 		} __packed set_reg;
-		struct {
-			u8 ins[0];
-		} __packed undoc_f1;
-		struct {
-			u32 addr;
-			u32 len;
-			u8 payload[0];
-		} __packed os_dump_mem;
 		struct {
 			u8 resv[3];
 			u32 check_sum;
-#define LOADER_BOOT_RESERVE_SIZE 12
-			u8 payload[FW_SPI_PKG_SIZE - LOADER_BOOT_RESERVE_SIZE];
+			u8 payload[];
 		} __packed boot;
-		u8 reserve[FW_SPI_PKG_SIZE - 5];
+		/* 5 is the offset of padding */
+		u8 padding[VSC_FW_PKG_SIZE - 5];
 	} data;
 } __packed;
+static_assert(sizeof(struct vsc_fw_master_frame) == VSC_FW_PKG_SIZE);
 
+/* fw download continue frame */
 struct vsc_master_frame_fw_cont {
-	u8 payload[FW_SPI_PKG_SIZE];
+	u8 payload[VSC_FW_PKG_SIZE];
 } __packed;
 
 struct vsc_rom_slave_token {
@@ -234,38 +217,32 @@ struct vsc_rom_slave_token {
 	u8 token;
 	u8 type;
 	u8 res[2];
-	u8 payload[VSC_ROM_SPI_PKG_SIZE - 8];
-} __packed;
-
-struct vsc_bol_slave_token {
-	u32 magic;
-	u8 token;
-	u8 type;
-	u8 res[2];
-	u8 payload[FW_SPI_PKG_SIZE - 8];
+	u8 payload[];
 } __packed;
 
 struct vsc_boot_img {
 	u32 magic;
 	u32 option;
 	u32 image_count;
-	u32 image_loc[IMG_CNT_MAX];
+	u32 image_loc[VSC_IMG_CNT_MAX];
 } __packed;
+#define VSC_BOOT_IMG_OPTION_MASK GENMASK(15, 0)
 
-struct vsc_sensor_img_t {
+struct vsc_sensor_img {
 	u32 magic;
 	u32 option;
 	u32 image_count;
-	u32 image_loc[IMG_ACEV_ACECNF];
+	u32 image_loc[VSC_IMG_ACEV_ACECNF];
 } __packed;
 
-struct bootloader_sign {
+/* bootloader sign */
+struct vsc_btl_sign {
 	u32 magic;
 	u32 image_size;
-	u8 image[0];
+	u8 image[];
 } __packed;
 
-struct manifest {
+struct vsc_fw_manifest {
 	u32 svn;
 	u32 header_ver;
 	u32 comp_flags;
@@ -275,51 +252,16 @@ struct manifest {
 	u32 module_addr;
 } __packed;
 
-struct firmware_sign {
+struct vsc_fw_sign {
 	u32 magic;
 	u32 image_size;
-	u8 image[1];
+	u8 image[];
 } __packed;
-
-/* spi transport layer */
-#define PACKET_SYNC 0x31
-#define MAX_SPI_MSG_SIZE 2048
-#define MAX_MEI_MSG_SIZE 512
-
-#define CRC_SIZE sizeof(u32)
-#define PACKET_SIZE(pkt) (sizeof(pkt->hdr) + (pkt->hdr.len) + (CRC_SIZE))
-#define MAX_PACKET_SIZE                                                        \
-	(sizeof(struct spi_xfer_hdr) + MAX_SPI_MSG_SIZE + (CRC_SIZE))
-
-/* SPI xfer timeout size definition */
-#define XFER_TIMEOUT_BYTES 700
-#define MAX_XFER_BUFFER_SIZE ((MAX_PACKET_SIZE) + (XFER_TIMEOUT_BYTES))
-
-struct spi_xfer_hdr {
-	u8 sync;
-	u8 cmd;
-	u16 len;
-	u32 seq;
-} __packed;
-
-struct spi_xfer_packet {
-	struct spi_xfer_hdr hdr;
-	u8 buf[MAX_XFER_BUFFER_SIZE - sizeof(struct spi_xfer_hdr)];
-} __packed;
-
-#define CMD_SPI_WRITE 0x01
-#define CMD_SPI_READ 0x02
-#define CMD_SPI_RESET_NOTIFY 0x04
-
-#define CMD_SPI_ACK 0x10
-#define CMD_SPI_NACK 0x11
-#define CMD_SPI_BUSY 0x12
-#define CMD_SPI_FATAL_ERR 0x13
 
 struct host_timestamp {
 	u64 realtime;
 	u64 boottime;
-} __packed;
+};
 
 struct vsc_boot_fw {
 	u32 main_ver;
@@ -327,9 +269,9 @@ struct vsc_boot_fw {
 	u32 key_src;
 	u32 svn;
 
-	u8 tx_buf[FW_SPI_PKG_SIZE];
-	u8 rx_buf[FW_SPI_PKG_SIZE];
-
+	/* buf used to transfer rom pkg or fw pkg */
+	char tx_buf[VSC_FW_PKG_SIZE];
+	char rx_buf[VSC_FW_PKG_SIZE];
 	/* FirmwareBootFile */
 	char fw_file_name[256];
 	/* PkgBootFile */
@@ -337,42 +279,33 @@ struct vsc_boot_fw {
 	/* SkuConfigBootFile */
 	char sku_cnf_file_name[256];
 
-	u32 fw_option;
-	u32 fw_cnt;
-	struct fragment frags[FRAGMENT_TYPE_MAX];
+	u16 fw_option;
+	u8 fw_cnt;
+
+	/* vsc fw image fragment for each vsc module */
+	struct vsc_img_frag frags[VSC_FRAG_MAX];
 };
 
 struct mei_vsc_hw {
-	struct spi_device *spi;
-	struct spi_transfer xfer;
-	struct spi_message msg;
-	u8 rx_buf[MAX_SPI_MSG_SIZE];
-	u8 tx_buf[MAX_SPI_MSG_SIZE];
+	struct vsctp *tp;
+	struct auxiliary_device *auxdev;
 	u32 rx_len;
 
-	int wakeuphostint;
-	struct gpio_desc *wakeuphost;
-	struct gpio_desc *resetfw;
-	struct gpio_desc *wakeupfw;
-
+	/* 4byte hdr size*/
+	char tx_buf[VSC_MEI_MAX_MSG_SIZE + sizeof(struct mei_msg_hdr)];
+	char rx_buf[VSC_MEI_MAX_MSG_SIZE + sizeof(struct mei_msg_hdr)];
+	atomic_t write_lock_cnt;
 	struct vsc_boot_fw fw;
 	bool host_ready;
 	bool fw_ready;
 
-	/* mei transport layer */
-	u32 seq;
-	u8 tx_buf1[MAX_XFER_BUFFER_SIZE];
-	u8 rx_buf1[MAX_XFER_BUFFER_SIZE];
-
-	struct work_struct probe_work;
-	struct mutex mutex;
+	/* mutex protecting communication with firmware */
 	bool disconnect;
-	atomic_t lock_cnt;
-	int write_lock_cnt;
-	wait_queue_head_t xfer_wait;
 	char cam_sensor_name[32];
 };
 
 #define to_vsc_hw(dev) ((struct mei_vsc_hw *)((dev)->hw))
+struct mei_device *mei_vsc_dev_init(struct device *parent);
+void mei_vsc_event_cb(void *context);
 
 #endif

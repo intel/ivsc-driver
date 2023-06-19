@@ -14,8 +14,11 @@ obj-m += i2c-ljca.o
 i2c-ljca-y := drivers/i2c/busses/i2c-ljca.o
 
 obj-m += mei-vsc.o
-mei-vsc-y := drivers/misc/mei/spi-vsc.o
+mei-vsc-y := drivers/misc/mei/aux-vsc.o
 mei-vsc-y += drivers/misc/mei/hw-vsc.o
+
+obj-m += spi-vsctp.o
+spi-vsctp-y := drivers/misc/mei/spi-vsctp.o
 
 obj-m += intel_vsc.o
 intel_vsc-y := drivers/misc/ivsc/intel_vsc.o

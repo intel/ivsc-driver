@@ -2,55 +2,43 @@
 /*
  * Intel La Jolla Cove Adapter USB-I2C driver
  *
- * Copyright (c) 2021, Intel Corporation.
+ * Copyright (c) 2023, Intel Corporation.
  */
 
-#include <linux/acpi.h>
+#include <linux/auxiliary_bus.h>
+#include <linux/bitfield.h>
+#include <linux/bits.h>
+#include <linux/dev_printk.h>
 #include <linux/i2c.h>
-#include <linux/mfd/ljca.h>
 #include <linux/module.h>
-#include <linux/platform_device.h>
-#include <linux/version.h>
+#include <linux/mfd/ljca.h>
 
 /* I2C commands */
-enum i2c_cmd {
-	I2C_INIT = 1,
-	I2C_XFER,
-	I2C_START,
-	I2C_STOP,
-	I2C_READ,
-	I2C_WRITE,
+enum ljca_i2c_cmd {
+	LJCA_I2C_INIT = 1,
+	LJCA_I2C_XFER,
+	LJCA_I2C_START,
+	LJCA_I2C_STOP,
+	LJCA_I2C_READ,
+	LJCA_I2C_WRITE,
 };
 
-enum i2c_address_mode {
-	I2C_ADDRESS_MODE_7BIT,
-	I2C_ADDRESS_MODE_10BIT,
+enum ljca_xfer_type {
+	LJCA_I2C_WRITE_XFER_TYPE,
+	LJCA_I2C_READ_XFER_TYPE,
 };
 
-enum xfer_type {
-	READ_XFER_TYPE,
-	WRITE_XFER_TYPE,
-};
+/* I2C init flags */
+#define LJCA_I2C_INIT_FLAG_MODE			BIT(0)
+#define LJCA_I2C_INIT_FLAG_MODE_POLLING		FIELD_PREP(LJCA_I2C_INIT_FLAG_MODE, 0)
+#define LJCA_I2C_INIT_FLAG_MODE_INTERRUPT	FIELD_PREP(LJCA_I2C_INIT_FLAG_MODE, 1)
 
-#define DEFAULT_I2C_CONTROLLER_ID 1
-#define DEFAULT_I2C_CAPACITY 0
-#define DEFAULT_I2C_INTR_PIN 0
+#define LJCA_I2C_INIT_FLAG_ADDR_16BIT		BIT(0)
 
-/* I2C r/w Flags */
-#define I2C_SLAVE_TRANSFER_WRITE (0)
-#define I2C_SLAVE_TRANSFER_READ (1)
-
-/* i2c init flags */
-#define I2C_INIT_FLAG_MODE_MASK (0x1 << 0)
-#define I2C_INIT_FLAG_MODE_POLLING (0x0 << 0)
-#define I2C_INIT_FLAG_MODE_INTERRUPT (0x1 << 0)
-
-#define I2C_FLAG_ADDR_16BIT (0x1 << 0)
-
-#define I2C_INIT_FLAG_FREQ_MASK (0x3 << 1)
-#define I2C_FLAG_FREQ_100K (0x0 << 1)
-#define I2C_FLAG_FREQ_400K (0x1 << 1)
-#define I2C_FLAG_FREQ_1M (0x2 << 1)
+#define LJCA_I2C_INIT_FLAG_FREQ			GENMASK(2, 1)
+#define LJCA_I2C_INIT_FLAG_FREQ_100K		FIELD_PREP(LJCA_I2C_INIT_FLAG_FREQ, 0)
+#define LJCA_I2C_INIT_FLAG_FREQ_400K		FIELD_PREP(LJCA_I2C_INIT_FLAG_FREQ, 1)
+#define LJCA_I2C_INIT_FLAG_FREQ_1M		FIELD_PREP(LJCA_I2C_INIT_FLAG_FREQ, 2)
 
 /* I2C Transfer */
 struct i2c_xfer {
@@ -69,25 +57,21 @@ struct i2c_rw_packet {
 	u8 data[];
 } __packed;
 
-#define LJCA_I2C_MAX_XFER_SIZE 256
-#define LJCA_I2C_BUF_SIZE                                                      \
-	(LJCA_I2C_MAX_XFER_SIZE + sizeof(struct i2c_rw_packet))
+#define LJCA_I2C_BUF_SIZE	60
+#define LJCA_I2C_MAX_XFER_SIZE	(LJCA_I2C_BUF_SIZE - sizeof(struct i2c_rw_packet))
 
 struct ljca_i2c_dev {
-	struct platform_device *pdev;
-	struct ljca_i2c_info *ctr_info;
+	struct ljca *ljca;
+	struct ljca_i2c_info *i2c_info;
 	struct i2c_adapter adap;
 
 	u8 obuf[LJCA_I2C_BUF_SIZE];
 	u8 ibuf[LJCA_I2C_BUF_SIZE];
 };
 
-static u8 ljca_i2c_format_slave_addr(u8 slave_addr, enum i2c_address_mode mode)
+static u8 ljca_i2c_format_slave_addr(u8 slave_addr, u8 type)
 {
-	if (mode == I2C_ADDRESS_MODE_7BIT)
-		return slave_addr << 1;
-
-	return 0xFF;
+	return (slave_addr << 1) | type;
 }
 
 static int ljca_i2c_init(struct ljca_i2c_dev *ljca_i2c, u8 id)
@@ -96,42 +80,38 @@ static int ljca_i2c_init(struct ljca_i2c_dev *ljca_i2c, u8 id)
 
 	memset(w_packet, 0, sizeof(*w_packet));
 	w_packet->id = id;
-	w_packet->len = cpu_to_le16(1);
-	w_packet->data[0] = I2C_FLAG_FREQ_400K;
+	w_packet->data[0] = LJCA_I2C_INIT_FLAG_FREQ_400K;
+	w_packet->len = cpu_to_le16(sizeof(*w_packet->data));
 
-	return ljca_transfer(ljca_i2c->pdev, I2C_INIT, w_packet,
-			     sizeof(*w_packet) + 1, NULL, NULL);
+	return ljca_transfer(ljca_i2c->ljca, LJCA_I2C_INIT, w_packet,
+			     struct_size(w_packet, data, 1), NULL, NULL);
 }
 
-static int ljca_i2c_start(struct ljca_i2c_dev *ljca_i2c, u8 slave_addr,
-			  enum xfer_type type)
+static int ljca_i2c_start(struct ljca_i2c_dev *ljca_i2c, u8 slave_addr, enum ljca_xfer_type type)
 {
 	struct i2c_rw_packet *w_packet = (struct i2c_rw_packet *)ljca_i2c->obuf;
 	struct i2c_rw_packet *r_packet = (struct i2c_rw_packet *)ljca_i2c->ibuf;
+	unsigned int ibuf_len = LJCA_I2C_BUF_SIZE;
 	int ret;
-	int ibuf_len;
+	s16 rp_len;
 
 	memset(w_packet, 0, sizeof(*w_packet));
-	w_packet->id = ljca_i2c->ctr_info->id;
-	w_packet->len = cpu_to_le16(1);
-	w_packet->data[0] =
-		ljca_i2c_format_slave_addr(slave_addr, I2C_ADDRESS_MODE_7BIT);
-	w_packet->data[0] |= (type == READ_XFER_TYPE) ?
-					   I2C_SLAVE_TRANSFER_READ :
-					   I2C_SLAVE_TRANSFER_WRITE;
+	w_packet->id = ljca_i2c->i2c_info->id;
+	w_packet->data[0] = ljca_i2c_format_slave_addr(slave_addr, type);
+	w_packet->len = cpu_to_le16(sizeof(*w_packet->data));
 
-	ret = ljca_transfer(ljca_i2c->pdev, I2C_START, w_packet,
-			    sizeof(*w_packet) + 1, r_packet, &ibuf_len);
+	ret = ljca_transfer(ljca_i2c->ljca, LJCA_I2C_START, w_packet,
+			    struct_size(w_packet, data, 1), r_packet, &ibuf_len);
+	if (ret)
+		return ret;
 
-	if (ret || ibuf_len < sizeof(*r_packet))
+	if (ibuf_len < sizeof(*r_packet))
 		return -EIO;
 
-	if ((s16)le16_to_cpu(r_packet->len) < 0 ||
-	    r_packet->id != w_packet->id) {
-		dev_err(&ljca_i2c->adap.dev,
-			"i2c start failed len:%d id:%d %d\n",
-			(s16)le16_to_cpu(r_packet->len), r_packet->id,
-			w_packet->id);
+	rp_len = le16_to_cpu(r_packet->len);
+	if (rp_len < 0 || r_packet->id != w_packet->id) {
+		dev_err(&ljca_i2c->adap.dev, "i2c start failed len:%d id:%d %d\n", rp_len,
+			r_packet->id, w_packet->id);
 		return -EIO;
 	}
 
@@ -142,61 +122,61 @@ static int ljca_i2c_stop(struct ljca_i2c_dev *ljca_i2c, u8 slave_addr)
 {
 	struct i2c_rw_packet *w_packet = (struct i2c_rw_packet *)ljca_i2c->obuf;
 	struct i2c_rw_packet *r_packet = (struct i2c_rw_packet *)ljca_i2c->ibuf;
+	unsigned int ibuf_len = LJCA_I2C_BUF_SIZE;
 	int ret;
-	int ibuf_len;
+	s16 rp_len;
 
 	memset(w_packet, 0, sizeof(*w_packet));
-	w_packet->id = ljca_i2c->ctr_info->id;
-	w_packet->len = cpu_to_le16(1);
+	w_packet->id = ljca_i2c->i2c_info->id;
 	w_packet->data[0] = 0;
+	w_packet->len = cpu_to_le16(sizeof(*w_packet->data));
 
-	ret = ljca_transfer(ljca_i2c->pdev, I2C_STOP, w_packet,
-			    sizeof(*w_packet) + 1, r_packet, &ibuf_len);
+	ret = ljca_transfer(ljca_i2c->ljca, LJCA_I2C_STOP, w_packet,
+			    struct_size(w_packet, data, 1), r_packet, &ibuf_len);
+	if (ret)
+		return ret;
 
-	if (ret || ibuf_len < sizeof(*r_packet))
+	if (ibuf_len < sizeof(*r_packet))
 		return -EIO;
 
-	if ((s16)le16_to_cpu(r_packet->len) < 0 ||
-	    r_packet->id != w_packet->id) {
-		dev_err(&ljca_i2c->adap.dev,
-			"i2c stop failed len:%d id:%d %d\n",
-			(s16)le16_to_cpu(r_packet->len), r_packet->id,
-			w_packet->id);
+	rp_len = le16_to_cpu(r_packet->len);
+	if (rp_len < 0 || r_packet->id != w_packet->id) {
+		dev_err(&ljca_i2c->adap.dev, "i2c stop failed len:%d id:%d %d\n", rp_len,
+			r_packet->id, w_packet->id);
 		return -EIO;
 	}
 
 	return 0;
 }
 
-static int ljca_i2c_pure_read(struct ljca_i2c_dev *ljca_i2c, u8 *data, int len)
+static int ljca_i2c_pure_read(struct ljca_i2c_dev *ljca_i2c, u8 *data, u8 len)
 {
 	struct i2c_rw_packet *w_packet = (struct i2c_rw_packet *)ljca_i2c->obuf;
 	struct i2c_rw_packet *r_packet = (struct i2c_rw_packet *)ljca_i2c->ibuf;
-	int ibuf_len;
+	unsigned int ibuf_len = LJCA_I2C_BUF_SIZE;
 	int ret;
+	s16 rp_len;
 
 	if (len > LJCA_I2C_MAX_XFER_SIZE)
 		return -EINVAL;
 
 	memset(w_packet, 0, sizeof(*w_packet));
-	w_packet->id = ljca_i2c->ctr_info->id;
+	w_packet->id = ljca_i2c->i2c_info->id;
 	w_packet->len = cpu_to_le16(len);
-	ret = ljca_transfer(ljca_i2c->pdev, I2C_READ, w_packet,
-			    sizeof(*w_packet) + 1, r_packet, &ibuf_len);
-	if (ret) {
-		dev_err(&ljca_i2c->adap.dev, "I2C_READ failed ret:%d\n", ret);
+	w_packet->data[0] = 0;
+
+	ret = ljca_transfer(ljca_i2c->ljca, LJCA_I2C_READ, w_packet,
+			    struct_size(w_packet, data, 1), r_packet, &ibuf_len);
+	if (ret)
 		return ret;
-	}
 
 	if (ibuf_len < sizeof(*r_packet))
 		return -EIO;
 
-	if ((s16)le16_to_cpu(r_packet->len) != len ||
-	    r_packet->id != w_packet->id) {
-		dev_err(&ljca_i2c->adap.dev,
-			"i2c raw read failed len:%d id:%d %d\n",
-			(s16)le16_to_cpu(r_packet->len), r_packet->id,
-			w_packet->id);
+	rp_len = le16_to_cpu(r_packet->len);
+	if (rp_len != len || r_packet->id != w_packet->id) {
+		dev_err(&ljca_i2c->adap.dev, "i2c raw read failed len:%d id:%d %d\n", rp_len,
+			r_packet->id, w_packet->id);
 		return -EIO;
 	}
 
@@ -210,76 +190,72 @@ static int ljca_i2c_read(struct ljca_i2c_dev *ljca_i2c, u8 slave_addr, u8 *data,
 {
 	int ret;
 
-	ret = ljca_i2c_start(ljca_i2c, slave_addr, READ_XFER_TYPE);
+	ret = ljca_i2c_start(ljca_i2c, slave_addr, LJCA_I2C_READ_XFER_TYPE);
 	if (ret)
-		return ret;
+		goto out_stop;
 
 	ret = ljca_i2c_pure_read(ljca_i2c, data, len);
-	if (ret) {
-		dev_err(&ljca_i2c->adap.dev, "i2c raw read failed ret:%d\n",
-			ret);
 
-		return ret;
-	}
+out_stop:
+	ljca_i2c_stop(ljca_i2c, slave_addr);
 
-	return ljca_i2c_stop(ljca_i2c, slave_addr);
+	return ret;
 }
 
 static int ljca_i2c_pure_write(struct ljca_i2c_dev *ljca_i2c, u8 *data, u8 len)
 {
 	struct i2c_rw_packet *w_packet = (struct i2c_rw_packet *)ljca_i2c->obuf;
 	struct i2c_rw_packet *r_packet = (struct i2c_rw_packet *)ljca_i2c->ibuf;
+	unsigned int ibuf_len = LJCA_I2C_BUF_SIZE;
+	s16 rplen;
 	int ret;
-	int ibuf_len;
 
 	if (len > LJCA_I2C_MAX_XFER_SIZE)
 		return -EINVAL;
 
 	memset(w_packet, 0, sizeof(*w_packet));
-	w_packet->id = ljca_i2c->ctr_info->id;
+	w_packet->id = ljca_i2c->i2c_info->id;
 	w_packet->len = cpu_to_le16(len);
 	memcpy(w_packet->data, data, len);
 
-	ret = ljca_transfer(ljca_i2c->pdev, I2C_WRITE, w_packet,
-			    sizeof(*w_packet) + w_packet->len, r_packet,
-			    &ibuf_len);
+	ret = ljca_transfer(ljca_i2c->ljca, LJCA_I2C_WRITE, w_packet,
+			    struct_size(w_packet, data, len), r_packet, &ibuf_len);
+	if (ret)
+		return ret;
 
-	if (ret || ibuf_len < sizeof(*r_packet))
+	if (ibuf_len < sizeof(*r_packet))
 		return -EIO;
 
-	if ((s16)le16_to_cpu(r_packet->len) != len ||
-	    r_packet->id != w_packet->id) {
-		dev_err(&ljca_i2c->adap.dev,
-			"i2c write failed len:%d id:%d/%d\n",
-			(s16)le16_to_cpu(r_packet->len), r_packet->id,
-			w_packet->id);
+	rplen = le16_to_cpu(r_packet->len);
+	if (rplen != len || r_packet->id != w_packet->id) {
+		dev_err(&ljca_i2c->adap.dev, "i2c write failed len:%d id:%d/%d\n", rplen,
+			r_packet->id, w_packet->id);
 		return -EIO;
 	}
 
 	return 0;
 }
 
-static int ljca_i2c_write(struct ljca_i2c_dev *ljca_i2c, u8 slave_addr,
-			  u8 *data, u8 len)
+static int ljca_i2c_write(struct ljca_i2c_dev *ljca_i2c, u8 slave_addr, u8 *data, u8 len)
 {
 	int ret;
 
 	if (!data)
 		return -EINVAL;
 
-	ret = ljca_i2c_start(ljca_i2c, slave_addr, WRITE_XFER_TYPE);
+	ret = ljca_i2c_start(ljca_i2c, slave_addr, LJCA_I2C_WRITE_XFER_TYPE);
 	if (ret)
-		return ret;
+		goto out_stop;
 
 	ret = ljca_i2c_pure_write(ljca_i2c, data, len);
-	if (ret)
-		return ret;
 
-	return ljca_i2c_stop(ljca_i2c, slave_addr);
+out_stop:
+	ljca_i2c_stop(ljca_i2c, slave_addr);
+
+	return ret;
 }
 
-static int ljca_i2c_xfer(struct i2c_adapter *adapter, struct i2c_msg *msg,
-			 int num)
+static int ljca_i2c_xfer(struct i2c_adapter *adapter, struct i2c_msg *msg, int num)
 {
 	struct ljca_i2c_dev *ljca_i2c;
 	struct i2c_msg *cur_msg;
@@ -291,15 +267,10 @@ static int ljca_i2c_xfer(struct i2c_adapter *adapter, struct i2c_msg *msg,
 
 	for (i = 0; i < num; i++) {
 		cur_msg = &msg[i];
-		dev_dbg(&adapter->dev, "i:%d msg:(%d %d)\n", i, cur_msg->flags,
-			cur_msg->len);
 		if (cur_msg->flags & I2C_M_RD)
-			ret = ljca_i2c_read(ljca_i2c, cur_msg->addr,
-					    cur_msg->buf, cur_msg->len);
-
+			ret = ljca_i2c_read(ljca_i2c, cur_msg->addr, cur_msg->buf, cur_msg->len);
 		else
-			ret = ljca_i2c_write(ljca_i2c, cur_msg->addr,
-					     cur_msg->buf, cur_msg->len);
+			ret = ljca_i2c_write(ljca_i2c, cur_msg->addr, cur_msg->buf, cur_msg->len);
 
 		if (ret)
 			return ret;
@@ -323,141 +294,57 @@ static const struct i2c_algorithm ljca_i2c_algo = {
 	.functionality = ljca_i2c_func,
 };
 
-struct match_ids_walk_data {
-	struct acpi_device *adev;
-	const char *hid1;
-	const char *uid2;
-	const char *uid2_v2;
-};
-
-static int match_device_ids(struct acpi_device *adev, void *data)
+static int ljca_i2c_probe(struct auxiliary_device *auxdev,
+			  const struct auxiliary_device_id *aux_dev_id)
 {
-	struct match_ids_walk_data *wd = data;
-
-	if (acpi_dev_hid_uid_match(adev, wd->hid1, wd->uid2) ||
-	    acpi_dev_hid_uid_match(adev, wd->hid1, wd->uid2_v2)) {
-		wd->adev = adev;
-		return 1;
-	}
-
-	return 0;
-}
-
-static void try_bind_acpi(struct platform_device *pdev,
-			  struct ljca_i2c_dev *ljca_i2c)
-{
-	struct acpi_device *parent;
-	struct acpi_device *cur = ACPI_COMPANION(&pdev->dev);
-	const char *hid1;
-	const char *uid1;
-	char uid2[2] = { 0 };
-	char uid2_v2[5] = { 0 };
-	struct match_ids_walk_data wd = { 0 };
-
-	if (!cur)
-		return;
-
-	hid1 = acpi_device_hid(cur);
-	uid1 = acpi_device_uid(cur);
-	snprintf(uid2, sizeof(uid2), "%d", ljca_i2c->ctr_info->id);
-	snprintf(uid2_v2, sizeof(uid2_v2), "VIC%d", ljca_i2c->ctr_info->id);
-
-	/*
-	* If the pdev is bound to the right acpi device, just forward it to the
-	* adapter. Otherwise, we find that of current adapter manually.
-	*/
-	if (!uid1 || !strcmp(uid1, uid2) || !strcmp(uid1, uid2_v2)) {
-		ACPI_COMPANION_SET(&ljca_i2c->adap.dev, cur);
-		return;
-	}
-
-	dev_info(&pdev->dev, "hid %s uid %s new uid%s\n", hid1, uid1, uid2);
-	parent = ACPI_COMPANION(pdev->dev.parent);
-	if (!parent)
-		return;
-
-	wd.hid1 = hid1;
-	wd.uid2 = uid2;
-	wd.uid2_v2 = uid2_v2;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)
-	acpi_dev_for_each_child(parent, match_device_ids, &wd);
-	ACPI_COMPANION_SET(&ljca_i2c->adap.dev, wd.adev);
-#else
-	list_for_each_entry(wd.adev, &parent->children, node) {
-		if (match_device_ids(wd.adev, &wd)) {
-			ACPI_COMPANION_SET(&ljca_i2c->adap.dev, wd.adev);
-			return;
-		}
-	}
-#endif
-}
-
-static int ljca_i2c_probe(struct platform_device *pdev)
-{
+	struct ljca *ljca = auxiliary_dev_to_ljca(auxdev);
 	struct ljca_i2c_dev *ljca_i2c;
-	struct ljca_platform_data *pdata = dev_get_platdata(&pdev->dev);
 	int ret;
 
-	ljca_i2c = devm_kzalloc(&pdev->dev, sizeof(*ljca_i2c), GFP_KERNEL);
+	ljca_i2c = devm_kzalloc(&auxdev->dev, sizeof(*ljca_i2c), GFP_KERNEL);
 	if (!ljca_i2c)
 		return -ENOMEM;
 
-	ljca_i2c->pdev = pdev;
-	ljca_i2c->ctr_info = &pdata->i2c_info;
-
+	ljca_i2c->ljca = ljca;
+	ljca_i2c->i2c_info = dev_get_platdata(&auxdev->dev);
 	ljca_i2c->adap.owner = THIS_MODULE;
 	ljca_i2c->adap.class = I2C_CLASS_HWMON;
 	ljca_i2c->adap.algo = &ljca_i2c_algo;
-	ljca_i2c->adap.dev.parent = &pdev->dev;
-
-	try_bind_acpi(pdev, ljca_i2c);
-
-	ljca_i2c->adap.dev.of_node = pdev->dev.of_node;
+	ljca_i2c->adap.quirks = &ljca_i2c_quirks;
+	ljca_i2c->adap.dev.parent = &auxdev->dev;
+	device_set_node(&ljca_i2c->adap.dev, dev_fwnode(&auxdev->dev));
 	i2c_set_adapdata(&ljca_i2c->adap, ljca_i2c);
 	snprintf(ljca_i2c->adap.name, sizeof(ljca_i2c->adap.name), "%s-%s-%d",
-		 "ljca-i2c", dev_name(pdev->dev.parent),
-		 ljca_i2c->ctr_info->id);
+		 dev_name(&auxdev->dev), dev_name(auxdev->dev.parent),
+		 ljca_i2c->i2c_info->id);
 
-	platform_set_drvdata(pdev, ljca_i2c);
+	auxiliary_set_drvdata(auxdev, ljca_i2c);
 
-	ret = ljca_i2c_init(ljca_i2c, ljca_i2c->ctr_info->id);
+	ret = ljca_i2c_init(ljca_i2c, ljca_i2c->i2c_info->id);
 	if (ret) {
-		dev_err(&pdev->dev, "i2c init failed id:%d\n",
-			ljca_i2c->ctr_info->id);
+		dev_err(&auxdev->dev, "i2c init failed id:%d\n", ljca_i2c->i2c_info->id);
 		return -EIO;
 	}
 
-	ret = i2c_add_adapter(&ljca_i2c->adap);
-	if (ret)
-		return ret;
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
-	if (has_acpi_companion(&ljca_i2c->adap.dev))
-		acpi_dev_clear_dependencies(ACPI_COMPANION(&ljca_i2c->adap.dev));
-#endif
-
-	return 0;
+	return devm_i2c_add_adapter(&auxdev->dev, &ljca_i2c->adap);
 }
 
-static int ljca_i2c_remove(struct platform_device *pdev)
-{
-	struct ljca_i2c_dev *ljca_i2c = platform_get_drvdata(pdev);
-
-	i2c_del_adapter(&ljca_i2c->adap);
-
-	return 0;
-}
-
-static struct platform_driver ljca_i2c_driver = {
-	.driver.name = "ljca-i2c",
-	.probe = ljca_i2c_probe,
-	.remove = ljca_i2c_remove,
+#define LJCA_I2C_DRV_NAME "ljca.ljca-i2c"
+static const struct auxiliary_device_id ljca_i2c_id_table[] = {
+	{ LJCA_I2C_DRV_NAME, 0 },
+	{ /* sentinel */ }
 };
+MODULE_DEVICE_TABLE(auxiliary, ljca_i2c_id_table);
 
-module_platform_driver(ljca_i2c_driver);
+static struct auxiliary_driver ljca_i2c_driver = {
+	.probe = ljca_i2c_probe,
+	.id_table = ljca_i2c_id_table,
+};
+module_auxiliary_driver(ljca_i2c_driver);
 
 MODULE_AUTHOR("Ye Xiang <xiang.ye@intel.com>");
+MODULE_AUTHOR("Wang Zhifeng <zhifeng.wang@intel.com>");
 MODULE_AUTHOR("Zhang Lixu <lixu.zhang@intel.com>");
 MODULE_DESCRIPTION("Intel La Jolla Cove Adapter USB-I2C driver");
-MODULE_LICENSE("GPL v2");
-MODULE_ALIAS("platform:ljca-i2c");
+MODULE_LICENSE("GPL");
+MODULE_IMPORT_NS(LJCA);
