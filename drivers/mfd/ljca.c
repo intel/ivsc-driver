@@ -268,6 +268,7 @@ static int match_device_ids(struct acpi_device *adev, void *data)
 static int precheck_acpi_hid(struct usb_interface *intf)
 {
 	struct device *parents[2];
+	struct acpi_device *adev;
 	int i;
 	int child_count;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 0, 0)
@@ -279,7 +280,11 @@ static int precheck_acpi_hid(struct usb_interface *intf)
 	if (!parents[0] || !parents[1])
 		return -ENODEV;
 
-	acpi_dev_clear_dependencies(ACPI_COMPANION(parents[0]));
+	adev = ACPI_COMPANION(parents[0]);
+	if (!adev)
+		return -ENODEV;
+
+	acpi_dev_clear_dependencies(adev);
 	sub_dev_parent = parents[0];
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)
