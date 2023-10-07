@@ -241,22 +241,25 @@ static int match_device_ids(struct acpi_device *adev, void *data)
 		return -ENODEV;
 
 	ret = try_match_acpi_hid(adev, gpio_hids, ARRAY_SIZE(gpio_hids));
-	if (ret > 0) {
+	if (ret >= 0 && ret < ARRAY_SIZE(gpio_hids)) {
 		ljca_acpi_match_gpio.pnpid = gpio_hids[ret];
 		(*child_count)++;
+		return 0;
 	}
 
 	ret = try_match_acpi_hid(adev, i2c_hids, ARRAY_SIZE(i2c_hids));
-	if (ret > 0) {
+	if (ret >= 0 && ret < ARRAY_SIZE(i2c_hids)) {
 		ljca_acpi_match_i2cs[0].pnpid = i2c_hids[ret];
 		ljca_acpi_match_i2cs[1].pnpid = i2c_hids[ret];
 		(*child_count)++;
+		return 0;
 	}
 
 	ret = try_match_acpi_hid(adev, spi_hids, ARRAY_SIZE(spi_hids));
-	if (ret > 0) {
+	if (ret >= 0 && ret < ARRAY_SIZE(spi_hids)) {
 		ljca_acpi_match_spis[0].pnpid = spi_hids[ret];
 		(*child_count)++;
+		return 0;
 	}
 
 	return 0;
