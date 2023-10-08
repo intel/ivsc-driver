@@ -32,19 +32,12 @@ static const struct acpi_gpio_mapping mei_vsc_acpi_gpios[] = {
 	{}
 };
 
-static struct acpi_device_id cvfd_ids[] = {
-	{
-		.id = "INTC1059",
-	},
-	{
-		.id = "INTC1095",
-	},
-	{
-		.id = "INTC100A",
-	},
-	{
-		.id = "INTC10CF",
-	},
+static const struct acpi_device_id cvfd_ids[] = {
+	{ "INTC1059", 0 },
+	{ "INTC1095", 0 },
+	{ "INTC100A", 0 },
+	{ "INTC10CF", 0 },
+	{}
 };
 
 struct match_ids_walk_data {
