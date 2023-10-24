@@ -548,7 +548,7 @@ static void mei_ace_remove(struct mei_cl_device *cldev)
 			     0x9B, 0x78, 0x03, 0x61, 0x63, 0x5E, 0x24, 0x47)
 
 static const struct mei_cl_device_id mei_ace_tbl[] = {
-	{ MEI_ACE_DRIVER_NAME, MEI_UUID_ACE, MEI_CL_VERSION_ANY },
+	{ .uuid = MEI_UUID_ACE, .version = MEI_CL_VERSION_ANY },
 
 	/* required last entry */
 	{ }
