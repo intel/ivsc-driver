@@ -123,6 +123,11 @@ static int get_sensor_name(struct mei_device *dev)
 		*c = tolower(*c);
 
 	ACPI_FREE(buffer.pointer);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
+	acpi_dev_clear_dependencies(adev);
+#endif
+
 	return 0;
 }
 
