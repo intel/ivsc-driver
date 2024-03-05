@@ -320,7 +320,7 @@ static bool ljca_validate(void *data, u32 data_len)
 	return (header->len + sizeof(*header) == data_len);
 }
 
-void ljca_dump(struct ljca_dev *ljca, void *buf, int len)
+static void ljca_dump(struct ljca_dev *ljca, void *buf, int len)
 {
 	int i;
 	u8 tmp[256] = { 0 };
