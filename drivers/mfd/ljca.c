@@ -221,7 +221,7 @@ static int try_match_acpi_hid(struct acpi_device *child, char **hids, int hids_n
 	int i;
 
 	for (i = 0; i < hids_num; i++) {
-		strlcpy(ids[0].id, hids[i], sizeof(ids[0].id));
+		strscpy(ids[0].id, hids[i], sizeof(ids[0].id));
 		if (!acpi_match_device_ids(child, ids))
 			return i;
 	}
