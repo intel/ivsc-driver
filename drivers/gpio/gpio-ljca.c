@@ -253,8 +253,8 @@ static void ljca_gpio_async(struct work_struct *work)
 	}
 }
 
-void ljca_gpio_event_cb(struct platform_device *pdev, u8 cmd,
-			const void *evt_data, int len)
+static void ljca_gpio_event_cb(struct platform_device *pdev, u8 cmd,
+			       const void *evt_data, int len)
 {
 	const struct gpio_packet *packet = evt_data;
 	struct ljca_gpio_dev *ljca_gpio = platform_get_drvdata(pdev);

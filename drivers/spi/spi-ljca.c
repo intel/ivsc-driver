@@ -210,10 +210,6 @@ static int ljca_spi_transfer(struct ljca_spi_dev *ljca_spi, const u8 *tx_data,
 static int ljca_spi_prepare_message(struct spi_master *master,
 				    struct spi_message *message)
 {
-	struct ljca_spi_dev *ljca_spi = spi_master_get_devdata(master);
-	struct spi_device *spi = message->spi;
-
-	dev_dbg(&ljca_spi->pdev->dev, "cs %d\n", spi->chip_select);
 	return 0;
 }
 
