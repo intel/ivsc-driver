@@ -85,6 +85,21 @@ enum mei_dev_pxp_mode {
 	MEI_DEV_PXP_READY   = 3,
 };
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
+/**
+ * enum mei_dev_reset_to_pxp - reset to PXP mode performed
+ *
+ * @MEI_DEV_RESET_TO_PXP_DEFAULT: before reset
+ * @MEI_DEV_RESET_TO_PXP_PERFORMED: reset performed
+ * @MEI_DEV_RESET_TO_PXP_DONE: reset processed
+ */
+enum mei_dev_reset_to_pxp {
+	MEI_DEV_RESET_TO_PXP_DEFAULT = 0,
+	MEI_DEV_RESET_TO_PXP_PERFORMED = 1,
+	MEI_DEV_RESET_TO_PXP_DONE = 2,
+};
+#endif
+
 const char *mei_dev_state_str(int state);
 
 enum mei_file_transaction_states {
@@ -523,6 +538,9 @@ struct mei_dev_timeouts {
  * @fw_ver : FW versions
  *
  * @fw_f_fw_ver_supported : fw feature: fw version supported
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
+ * @fw_ver_received : fw version received
+#endif
  *
  * @me_clients_rwsem: rw lock over me_clients list
  * @me_clients  : list of FW clients
@@ -545,6 +563,13 @@ struct mei_dev_timeouts {
  * @kind        : kind of mei device
  *
  * @dbgfs_dir   : debugfs mei root directory
+ *
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
+ * @saved_fw_status      : saved firmware status
+ * @saved_dev_state      : saved device state
+ * @saved_fw_status_flag : flag indicating that firmware status was saved
+ * @gsc_reset_to_pxp     : state of reset to the PXP mode
+#endif
  *
  * @ops:        : hw specific operations
  * @hw          : hw specific data
@@ -619,6 +644,9 @@ struct mei_device {
 	struct mei_fw_version fw_ver[MEI_MAX_FW_VER_BLOCKS];
 
 	unsigned int fw_f_fw_ver_supported:1;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
+	unsigned int fw_ver_received:1;
+#endif
 
 	struct rw_semaphore me_clients_rwsem;
 	struct list_head me_clients;
@@ -644,6 +672,13 @@ struct mei_device {
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 	struct dentry *dbgfs_dir;
 #endif /* CONFIG_DEBUG_FS */
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
+	struct mei_fw_status saved_fw_status;
+	enum mei_dev_state saved_dev_state;
+	bool saved_fw_status_flag;
+	enum mei_dev_reset_to_pxp gsc_reset_to_pxp;
+#endif
 
 	const struct mei_hw_ops *ops;
 	char hw[] __aligned(sizeof(void *));
