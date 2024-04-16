@@ -222,7 +222,7 @@ static int try_match_acpi_hid(struct acpi_device *child, char **hids, int hids_n
 	int i;
 
 	for (i = 0; i < hids_num; i++) {
-		strlcpy(ids[0].id, hids[i], sizeof(ids[0].id));
+		strscpy(ids[0].id, hids[i], sizeof(ids[0].id));
 		if (!acpi_match_device_ids(child, ids))
 			return i;
 	}
@@ -321,7 +321,7 @@ static bool ljca_validate(void *data, u32 data_len)
 	return (header->len + sizeof(*header) == data_len);
 }
 
-void ljca_dump(struct ljca_dev *ljca, void *buf, int len)
+static void ljca_dump(struct ljca_dev *ljca, void *buf, int len)
 {
 	int i;
 	u8 tmp[256] = { 0 };
