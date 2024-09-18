@@ -1,6 +1,7 @@
 # ivsc-driver
 
 This repository supports Intel Vision Sensing Controller(IVSC) on Intel Alder Lake platforms.
+The driver has already been upstreamed to Linux main branch.
 
 
 ## Build instructions:
